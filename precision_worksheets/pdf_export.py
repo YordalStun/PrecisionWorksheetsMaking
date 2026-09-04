@@ -1,0 +1,117 @@
+"""Render ProbeSheet objects to a printable PDF using reportlab."""
+
+from __future__ import annotations
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import (
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+
+from .generator import ProbeSheet
+
+PAGE_WIDTH, PAGE_HEIGHT = A4
+MARGIN = 14 * mm
+
+
+def export_pdf(
+    sheets: list[ProbeSheet],
+    output_path: str,
+    include_word_list: bool = True,
+    grid_font_size: int = 18,
+) -> None:
+    """Write `sheets` to `output_path` as a single multi-page PDF."""
+    if not sheets:
+        raise ValueError("No sheets to export")
+
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=A4,
+        topMargin=MARGIN,
+        bottomMargin=MARGIN,
+        leftMargin=MARGIN,
+        rightMargin=MARGIN,
+        title="Precision Teaching Probe Sheet",
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "PTTitle", parent=styles["Title"], fontSize=18, alignment=TA_CENTER, spaceAfter=6
+    )
+    meta_style = ParagraphStyle(
+        "PTMeta", parent=styles["Normal"], fontSize=11, alignment=TA_CENTER, spaceAfter=2
+    )
+    word_style = ParagraphStyle(
+        "PTWords",
+        parent=styles["Normal"],
+        fontSize=12,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#333333"),
+        spaceAfter=8,
+    )
+    footer_style = ParagraphStyle(
+        "PTFooter", parent=styles["Normal"], fontSize=11, alignment=TA_CENTER, spaceBefore=10
+    )
+
+    usable_width = PAGE_WIDTH - 2 * MARGIN
+    row_num_width = 10 * mm
+
+    story = []
+    for sheet in sheets:
+        story.append(Paragraph("Precision Teaching Probe Sheet", title_style))
+        story.append(
+            Paragraph(
+                f"Name: {sheet.child_name} &nbsp;&nbsp;&nbsp;&nbsp; "
+                f"Date: {sheet.date_str} &nbsp;&nbsp;&nbsp;&nbsp; "
+                f"Sheet {sheet.sheet_number} of {sheet.total_sheets}",
+                meta_style,
+            )
+        )
+        if include_word_list:
+            story.append(Paragraph("Target words: " + ", ".join(sheet.words), word_style))
+        story.append(Spacer(1, 6))
+
+        data = [[str(i)] + row for i, row in enumerate(sheet.grid, start=1)]
+        grid_col_width = (usable_width - row_num_width) / sheet.cols
+        col_widths = [row_num_width] + [grid_col_width] * sheet.cols
+
+        table = Table(data, colWidths=col_widths, repeatRows=0)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("GRID", (0, 0), (-1, -1), 0.75, colors.grey),
+                    ("FONTNAME", (1, 0), (-1, -1), "Helvetica-Bold"),
+                    ("FONTSIZE", (1, 0), (-1, -1), grid_font_size),
+                    ("FONTSIZE", (0, 0), (0, -1), 9),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eeeeee")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ]
+            )
+        )
+        story.append(table)
+
+        story.append(
+            Paragraph(
+                "Time (seconds): _______ &nbsp;&nbsp;&nbsp; "
+                "Correct: _______ &nbsp;&nbsp;&nbsp; "
+                "Errors: _______ &nbsp;&nbsp;&nbsp; "
+                "Correct per minute: _______",
+                footer_style,
+            )
+        )
+
+        if sheet.sheet_number != sheet.total_sheets:
+            story.append(PageBreak())
+
+    doc.build(story)
