@@ -6,11 +6,10 @@ from docx import Document
 from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
-from docx.shared import Cm, Pt
+from docx.shared import Cm
 from reportlab.lib.units import cm as POINTS_PER_CM
 
+from .docx_helpers import set_cell_margins, set_cell_text, set_column_widths, set_run_font
 from .generator import ProbeSheet
 from .layout import fit_grid_font_size
 
@@ -33,11 +32,6 @@ _HEADER_HEIGHT_WITHOUT_WORDLIST_PT = 105
 _FOOTER_HEIGHT_PT = 50
 _GRID_LEADING_FACTOR = 1.15
 _MIN_ROW_PADDING_PT = 10
-
-# Comic Sans MS ships with every edition of Windows, so referencing it by
-# name (rather than embedding a font file) is reliable for a Windows app -
-# Word just uses whatever copy is already installed on the machine.
-COMIC_FONT_NAME = "Comic Sans MS"
 
 
 def export_docx(
@@ -73,7 +67,7 @@ def export_docx(
         title = doc.add_heading("Precision Teaching Probe Sheet", level=1)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         for run in title.runs:
-            _set_run_font(run)
+            set_run_font(run)
 
         meta = doc.add_paragraph()
         meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -82,14 +76,14 @@ def export_docx(
             f"Sheet {sheet.sheet_number} of {sheet.total_sheets}"
         )
         meta_run.bold = True
-        _set_run_font(meta_run)
+        set_run_font(meta_run)
 
         if include_word_list:
             wp = doc.add_paragraph()
             wp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = wp.add_run("Target words: " + ", ".join(sheet.words))
             run.italic = True
-            _set_run_font(run)
+            set_run_font(run)
 
         table = doc.add_table(rows=sheet.rows, cols=sheet.cols + 1)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -97,7 +91,7 @@ def export_docx(
         table.autofit = False
 
         col_width_cm = (usable_width_cm - ROW_NUM_COL_CM) / sheet.cols
-        _set_column_widths(table, [ROW_NUM_COL_CM] + [col_width_cm] * sheet.cols)
+        set_column_widths(table, [ROW_NUM_COL_CM] + [col_width_cm] * sheet.cols)
 
         # A word only shrinks below grid_font_size if it wouldn't otherwise
         # fit on one line in its box.
@@ -116,13 +110,13 @@ def export_docx(
         target_row_height = available_grid_height / sheet.rows
         text_block_height = fitted_font_size * _GRID_LEADING_FACTOR
         vertical_padding = max(_MIN_ROW_PADDING_PT, (target_row_height - text_block_height) / 2)
-        _set_cell_margins(table, top_pt=vertical_padding, bottom_pt=vertical_padding, left_pt=6, right_pt=6)
+        set_cell_margins(table, top_pt=vertical_padding, bottom_pt=vertical_padding, left_pt=6, right_pt=6)
 
         for r, row_words in enumerate(sheet.grid):
             cells = table.rows[r].cells
-            _set_cell_text(cells[0], str(r + 1), size_pt=9, bold=False)
+            set_cell_text(cells[0], str(r + 1), size_pt=9, bold=False)
             for c, word in enumerate(row_words, start=1):
-                _set_cell_text(cells[c], word, size_pt=fitted_font_size, bold=True)
+                set_cell_text(cells[c], word, size_pt=fitted_font_size, bold=True)
 
         footer = doc.add_paragraph()
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -130,63 +124,9 @@ def export_docx(
             "Time (seconds): _______     Correct: _______     "
             "Errors: _______     Correct per minute: _______"
         )
-        _set_run_font(footer_run)
+        set_run_font(footer_run)
 
         if sheet.sheet_number != sheet.total_sheets:
             doc.add_page_break()
 
     doc.save(output_path)
-
-
-def _set_cell_text(cell, text: str, size_pt: int, bold: bool) -> None:
-    cell.text = ""
-    paragraph = cell.paragraphs[0]
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = paragraph.add_run(text)
-    run.font.size = Pt(size_pt)
-    run.font.bold = bold
-    _set_run_font(run)
-
-
-def _set_run_font(run, name: str = COMIC_FONT_NAME) -> None:
-    run.font.name = name
-    # Word can pick a different font for the "complex script" slot even
-    # when w:ascii/w:hAnsi are set, so pin that explicitly too.
-    rpr = run._element.get_or_add_rPr()
-    rfonts = rpr.find(qn("w:rFonts"))
-    if rfonts is None:
-        rfonts = OxmlElement("w:rFonts")
-        rpr.append(rfonts)
-    rfonts.set(qn("w:cs"), name)
-
-
-def _set_cell_margins(table, top_pt: float, bottom_pt: float, left_pt: float, right_pt: float) -> None:
-    """python-docx has no direct API for cell padding, so set it via the
-    table-wide tblCellMar - twentieths of a point (dxa) per the OOXML spec.
-
-    tblPr's children must stay in schema order (tblLayout, then tblCellMar,
-    then tblLook, ...), so this is inserted before tblLook rather than just
-    appended - a plain append would land after tblLook, which python-docx's
-    add_table() already added.
-    """
-    tbl_pr = table._tbl.tblPr
-    cell_mar = OxmlElement("w:tblCellMar")
-    for tag, value_pt in (("top", top_pt), ("bottom", bottom_pt), ("left", left_pt), ("right", right_pt)):
-        node = OxmlElement(f"w:{tag}")
-        node.set(qn("w:w"), str(int(value_pt * 20)))
-        node.set(qn("w:type"), "dxa")
-        cell_mar.append(node)
-    tbl_pr.insert_element_before(
-        cell_mar, "w:tblLook", "w:tblCaption", "w:tblDescription", "w:tblPrChange"
-    )
-
-
-def _set_column_widths(table, widths_cm: list[float]) -> None:
-    """python-docx needs the width set on every cell, not just the column,
-    for Word to respect it reliably. Setting autofit=False already adds a
-    correctly-ordered `w:tblLayout type="fixed"` (see CT_TblPr.autofit), so
-    there's no need to add a second one by hand."""
-    table.autofit = False
-    for row in table.rows:
-        for cell, width in zip(row.cells, widths_cm):
-            cell.width = Cm(width)

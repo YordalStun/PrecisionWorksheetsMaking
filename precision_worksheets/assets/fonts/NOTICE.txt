@@ -1,0 +1,10 @@
+Comic Neue (ComicNeue-Regular.otf, ComicNeue-Bold.otf)
+
+Copyright 2014-2016 Craig Rozynski, 2014 Hrant Papazian, 2016 Brandon Schoech.
+Source: https://github.com/crozynski/comicneue
+
+Licensed under the SIL Open Font License, Version 1.1 - see OFL.txt in this
+folder. Used here as a free, redistributable stand-in for Comic Sans MS on
+platforms where the real Microsoft font isn't available (this app prefers
+the genuine Comic Sans MS from the local Windows installation when it can
+find one - see precision_worksheets/fonts.py).

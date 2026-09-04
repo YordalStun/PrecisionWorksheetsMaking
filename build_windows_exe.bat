@@ -16,7 +16,9 @@ python -m pip install pyinstaller
 
 echo.
 echo Building PrecisionWorksheetMaker.exe ...
-pyinstaller --noconfirm --onefile --windowed --name "PrecisionWorksheetMaker" run.py
+pyinstaller --noconfirm --onefile --windowed --name "PrecisionWorksheetMaker" ^
+    --add-data "precision_worksheets/assets;precision_worksheets/assets" ^
+    run.py
 
 echo.
 echo Done. Find PrecisionWorksheetMaker.exe inside the "dist" folder.
