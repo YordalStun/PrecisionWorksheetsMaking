@@ -35,7 +35,7 @@ class PrecisionWorksheetApp:
         self.sheets_var = tk.IntVar(value=5)
         self.rows_var = tk.IntVar(value=4)
         self.cols_var = tk.IntVar(value=5)
-        self.font_size_var = tk.IntVar(value=18)
+        self.font_size_var = tk.IntVar(value=60)
         self.show_word_list_var = tk.BooleanVar(value=True)
         self.make_pdf_var = tk.BooleanVar(value=True)
         self.make_docx_var = tk.BooleanVar(value=True)
@@ -95,8 +95,8 @@ class PrecisionWorksheetApp:
             row=0, column=5, sticky="w", padx=(6, 0)
         )
 
-        ttk.Label(frame, text="Word font size:").grid(row=1, column=0, sticky="w", pady=(8, 0))
-        ttk.Spinbox(frame, from_=12, to=36, textvariable=self.font_size_var, width=6).grid(
+        ttk.Label(frame, text="Max word size:").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Spinbox(frame, from_=12, to=96, textvariable=self.font_size_var, width=6).grid(
             row=1, column=1, sticky="w", padx=(6, 24), pady=(8, 0)
         )
 
@@ -238,8 +238,8 @@ class PrecisionWorksheetApp:
             raise ValueError("Grid rows must be between 3 and 25.")
         if not (3 <= cols <= 15):
             raise ValueError("Grid columns must be between 3 and 15.")
-        if not (12 <= font_size <= 36):
-            raise ValueError("Font size must be between 12 and 36.")
+        if not (12 <= font_size <= 96):
+            raise ValueError("Max word size must be between 12 and 96.")
 
         make_pdf = self.make_pdf_var.get()
         make_docx = self.make_docx_var.get()

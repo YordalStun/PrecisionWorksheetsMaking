@@ -14,14 +14,12 @@ from reportlab.lib.units import cm as POINTS_PER_CM
 from .generator import ProbeSheet
 from .layout import fit_grid_font_size
 
-ROW_NUM_COL_CM = 1.0
+ROW_NUM_COL_CM = 0.8
 
-# A4 landscape - matches the PDF, and gives noticeably wider boxes than
-# portrait for a grid that's wider than it is tall (the default is 5
-# columns x 4 rows). Set explicitly rather than relying on Word's default
-# template, which isn't guaranteed to be A4.
-PAGE_WIDTH_CM = 29.7
-PAGE_HEIGHT_CM = 21.0
+# A4 portrait, set explicitly rather than relying on Word's default
+# template (which isn't guaranteed to be A4).
+PAGE_WIDTH_CM = 21.0
+PAGE_HEIGHT_CM = 29.7
 
 # Comic Sans MS ships with every edition of Windows, so referencing it by
 # name (rather than embedding a font file) is reliable for a Windows app -
@@ -33,21 +31,26 @@ def export_docx(
     sheets: list[ProbeSheet],
     output_path: str,
     include_word_list: bool = True,
-    grid_font_size: int = 18,
+    grid_font_size: int = 60,
 ) -> None:
-    """Write `sheets` to `output_path` as a single multi-page .docx file."""
+    """Write `sheets` to `output_path` as a single multi-page .docx file.
+
+    `grid_font_size` is a ceiling, not a fixed size: each sheet's words are
+    drawn as large as they can be while still fitting on one line in their
+    box, up to this cap.
+    """
     if not sheets:
         raise ValueError("No sheets to export")
 
     doc = Document()
     section = doc.sections[0]
-    section.orientation = WD_ORIENT.LANDSCAPE
+    section.orientation = WD_ORIENT.PORTRAIT
     section.page_width = Cm(PAGE_WIDTH_CM)
     section.page_height = Cm(PAGE_HEIGHT_CM)
-    section.left_margin = Cm(1.5)
-    section.right_margin = Cm(1.5)
-    section.top_margin = Cm(1.5)
-    section.bottom_margin = Cm(1.5)
+    section.left_margin = Cm(1.0)
+    section.right_margin = Cm(1.0)
+    section.top_margin = Cm(1.0)
+    section.bottom_margin = Cm(1.0)
     usable_width_emu = section.page_width - section.left_margin - section.right_margin
     usable_width_cm = usable_width_emu / Cm(1)
 
@@ -80,10 +83,11 @@ def export_docx(
 
         col_width_cm = (usable_width_cm - ROW_NUM_COL_CM) / sheet.cols
         _set_column_widths(table, [ROW_NUM_COL_CM] + [col_width_cm] * sheet.cols)
-        _set_cell_margins(table, top_pt=10, bottom_pt=10, left_pt=4, right_pt=4)
+        _set_cell_margins(table, top_pt=14, bottom_pt=14, left_pt=6, right_pt=6)
 
-        # Shrink the font below the requested size only if a word would
-        # otherwise be too wide for its box - never grow past what was asked.
+        # Words are drawn as big as they can be while still fitting on one
+        # line in their box, up to grid_font_size - grows short words up,
+        # shrinks long words down, never lets text spill over the lines.
         fitted_font_size = fit_grid_font_size(
             sheet.words, grid_font_size, col_width_cm * POINTS_PER_CM
         )
