@@ -16,11 +16,16 @@ Each page has:
 
 - A header with the child's name, the date, and the sheet number
 - (Optional) the list of the 5 target words for reference
-- A grid of cells (5 columns x 4 rows by default, adjustable) filled with
-  the 5 words, repeated evenly and shuffled so no two neighbouring cells
-  hold the same word (stops the child from just reading down a line of the
-  same word) - each sheet in a batch is shuffled differently, so re-using
-  the pack doesn't let a child memorise the order
+- A grid of big, roomy cells (5 columns x 4 rows by default, adjustable)
+  filled with the 5 words, repeated evenly and shuffled so no two
+  neighbouring cells hold the same word (stops the child from just reading
+  down a line of the same word) - each sheet in a batch is shuffled
+  differently, so re-using the pack doesn't let a child memorise the order
+- Pages print landscape, which gives each box more width to work with -
+  and if a word is still too wide for its box (a very long word, or a
+  grid with lots of columns), the app automatically shrinks that sheet's
+  font just enough to fit rather than letting the text spill over the
+  lines
 - Row numbers down the left edge, so you can count how far the child got
 - Everything is set in **Comic Sans MS** (see the Fonts section below) for
   a friendly, easy-to-read look
@@ -94,10 +99,11 @@ run.py                        entry point - launches the GUI
 precision_worksheets/
   generator.py                 word-grid shuffling logic (no UI/file code)
   fonts.py                     finds/registers Comic Sans MS for PDF output
+  layout.py                    shrinks the grid font if a word wouldn't fit its box
   pdf_export.py                turns sheets into a PDF (reportlab)
   docx_export.py                turns sheets into a Word doc (python-docx)
   gui.py                        the Tkinter window that ties it together
-tests/                          unit tests for the generator, fonts and exporters
+tests/                          unit tests for the generator, fonts, layout and exporters
 build_windows_exe.bat           packages the app as a Windows .exe
 ```
 

@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 from docx import Document
+from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.shared import Cm, Pt
+from reportlab.lib.units import cm as POINTS_PER_CM
 
 from .generator import ProbeSheet
+from .layout import fit_grid_font_size
 
 ROW_NUM_COL_CM = 1.0
+
+# A4 landscape - matches the PDF, and gives noticeably wider boxes than
+# portrait for a grid that's wider than it is tall (the default is 5
+# columns x 4 rows). Set explicitly rather than relying on Word's default
+# template, which isn't guaranteed to be A4.
+PAGE_WIDTH_CM = 29.7
+PAGE_HEIGHT_CM = 21.0
 
 # Comic Sans MS ships with every edition of Windows, so referencing it by
 # name (rather than embedding a font file) is reliable for a Windows app -
@@ -31,6 +41,9 @@ def export_docx(
 
     doc = Document()
     section = doc.sections[0]
+    section.orientation = WD_ORIENT.LANDSCAPE
+    section.page_width = Cm(PAGE_WIDTH_CM)
+    section.page_height = Cm(PAGE_HEIGHT_CM)
     section.left_margin = Cm(1.5)
     section.right_margin = Cm(1.5)
     section.top_margin = Cm(1.5)
@@ -67,12 +80,19 @@ def export_docx(
 
         col_width_cm = (usable_width_cm - ROW_NUM_COL_CM) / sheet.cols
         _set_column_widths(table, [ROW_NUM_COL_CM] + [col_width_cm] * sheet.cols)
+        _set_cell_margins(table, top_pt=10, bottom_pt=10, left_pt=4, right_pt=4)
+
+        # Shrink the font below the requested size only if a word would
+        # otherwise be too wide for its box - never grow past what was asked.
+        fitted_font_size = fit_grid_font_size(
+            sheet.words, grid_font_size, col_width_cm * POINTS_PER_CM
+        )
 
         for r, row_words in enumerate(sheet.grid):
             cells = table.rows[r].cells
             _set_cell_text(cells[0], str(r + 1), size_pt=9, bold=False)
             for c, word in enumerate(row_words, start=1):
-                _set_cell_text(cells[c], word, size_pt=grid_font_size, bold=True)
+                _set_cell_text(cells[c], word, size_pt=fitted_font_size, bold=True)
 
         footer = doc.add_paragraph()
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -110,16 +130,33 @@ def _set_run_font(run, name: str = COMIC_FONT_NAME) -> None:
     rfonts.set(qn("w:cs"), name)
 
 
+def _set_cell_margins(table, top_pt: float, bottom_pt: float, left_pt: float, right_pt: float) -> None:
+    """python-docx has no direct API for cell padding, so set it via the
+    table-wide tblCellMar - twentieths of a point (dxa) per the OOXML spec.
+
+    tblPr's children must stay in schema order (tblLayout, then tblCellMar,
+    then tblLook, ...), so this is inserted before tblLook rather than just
+    appended - a plain append would land after tblLook, which python-docx's
+    add_table() already added.
+    """
+    tbl_pr = table._tbl.tblPr
+    cell_mar = OxmlElement("w:tblCellMar")
+    for tag, value_pt in (("top", top_pt), ("bottom", bottom_pt), ("left", left_pt), ("right", right_pt)):
+        node = OxmlElement(f"w:{tag}")
+        node.set(qn("w:w"), str(int(value_pt * 20)))
+        node.set(qn("w:type"), "dxa")
+        cell_mar.append(node)
+    tbl_pr.insert_element_before(
+        cell_mar, "w:tblLook", "w:tblCaption", "w:tblDescription", "w:tblPrChange"
+    )
+
+
 def _set_column_widths(table, widths_cm: list[float]) -> None:
     """python-docx needs the width set on every cell, not just the column,
-    for Word to respect it reliably."""
+    for Word to respect it reliably. Setting autofit=False already adds a
+    correctly-ordered `w:tblLayout type="fixed"` (see CT_TblPr.autofit), so
+    there's no need to add a second one by hand."""
     table.autofit = False
     for row in table.rows:
         for cell, width in zip(row.cells, widths_cm):
             cell.width = Cm(width)
-    # Also disable the table's auto-layout so fixed widths stick.
-    tbl = table._tbl
-    tbl_pr = tbl.tblPr
-    layout = OxmlElement("w:tblLayout")
-    layout.set(qn("w:type"), "fixed")
-    tbl_pr.append(layout)

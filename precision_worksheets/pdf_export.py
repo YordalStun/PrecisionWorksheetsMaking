@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
@@ -18,8 +18,12 @@ from reportlab.platypus import (
 
 from .fonts import get_comic_font_names
 from .generator import ProbeSheet
+from .layout import fit_grid_font_size
 
-PAGE_WIDTH, PAGE_HEIGHT = A4
+# Landscape gives noticeably wider boxes than portrait for a grid that's
+# wider than it is tall (the default is 5 columns x 4 rows), which is the
+# main lever for making the words-in-boxes bigger without shrinking text.
+PAGE_WIDTH, PAGE_HEIGHT = landscape(A4)
 MARGIN = 14 * mm
 
 
@@ -35,7 +39,7 @@ def export_pdf(
 
     doc = SimpleDocTemplate(
         output_path,
-        pagesize=A4,
+        pagesize=landscape(A4),
         topMargin=MARGIN,
         bottomMargin=MARGIN,
         leftMargin=MARGIN,
@@ -102,20 +106,26 @@ def export_pdf(
         grid_col_width = (usable_width - row_num_width) / sheet.cols
         col_widths = [row_num_width] + [grid_col_width] * sheet.cols
 
+        # Shrink the font below the requested size only if a word would
+        # otherwise be too wide for its box - never grow past what was asked.
+        fitted_font_size = fit_grid_font_size(sheet.words, grid_font_size, grid_col_width)
+
         table = Table(data, colWidths=col_widths, repeatRows=0)
         table.setStyle(
             TableStyle(
                 [
                     ("GRID", (0, 0), (-1, -1), 0.75, colors.grey),
                     ("FONTNAME", (1, 0), (-1, -1), comic_bold),
-                    ("FONTSIZE", (1, 0), (-1, -1), grid_font_size),
+                    ("FONTSIZE", (1, 0), (-1, -1), fitted_font_size),
                     ("FONTNAME", (0, 0), (0, -1), comic_regular),
                     ("FONTSIZE", (0, 0), (0, -1), 9),
                     ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                     ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eeeeee")),
-                    ("TOPPADDING", (0, 0), (-1, -1), 6),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 12),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
                 ]
             )
         )
