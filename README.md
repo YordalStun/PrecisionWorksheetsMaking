@@ -16,11 +16,14 @@ Each page has:
 
 - A header with the child's name, the date, and the sheet number
 - (Optional) the list of the 5 target words for reference
-- A grid of cells filled with the 5 words, repeated evenly and shuffled so
-  no two neighbouring cells hold the same word (stops the child from just
-  reading down a line of the same word) - each sheet in a batch is shuffled
-  differently, so re-using the pack doesn't let a child memorise the order
+- A grid of cells (5 columns x 4 rows by default, adjustable) filled with
+  the 5 words, repeated evenly and shuffled so no two neighbouring cells
+  hold the same word (stops the child from just reading down a line of the
+  same word) - each sheet in a batch is shuffled differently, so re-using
+  the pack doesn't let a child memorise the order
 - Row numbers down the left edge, so you can count how far the child got
+- Everything is set in **Comic Sans MS** (see the Fonts section below) for
+  a friendly, easy-to-read look
 - A scoring line at the bottom: time taken, number correct, number of
   errors, and correct-per-minute, ready to fill in by hand while listening
   to the child read
@@ -67,16 +70,34 @@ sandbox, so this step needs to be run once **on your own Windows PC**:
 6. Click **Generate worksheets**. The PDF/Word file appears in that folder,
    containing one probe sheet per page, ready to print in bulk.
 
+## Fonts
+
+Every sheet is set in **Comic Sans MS**. It's a standard Windows font (has
+shipped with every edition of Windows since 3.1), so:
+
+- **Word (.docx) files** just reference it by name - Word uses whatever
+  copy is already installed on the PC that opens the file, which on
+  Windows is always the real thing.
+- **PDF files** need the actual font file embedded at the point the PDF is
+  built (that's how PDF works). The app looks for the real
+  `C:\Windows\Fonts\comic.ttf` (and `comicbd.ttf` for bold) on the machine
+  it's running on and embeds those. We don't bundle Comic Sans MS in this
+  repo ourselves - it's a Microsoft font and redistributing the file isn't
+  allowed - but since it's already on essentially every Windows PC, the app
+  finds and uses it automatically. If it's ever missing, the PDF falls back
+  to a plain built-in font instead of crashing (see `precision_worksheets/fonts.py`).
+
 ## Project layout
 
 ```
 run.py                        entry point - launches the GUI
 precision_worksheets/
   generator.py                 word-grid shuffling logic (no UI/file code)
+  fonts.py                     finds/registers Comic Sans MS for PDF output
   pdf_export.py                turns sheets into a PDF (reportlab)
   docx_export.py                turns sheets into a Word doc (python-docx)
   gui.py                        the Tkinter window that ties it together
-tests/                          unit tests for the generator and exporters
+tests/                          unit tests for the generator, fonts and exporters
 build_windows_exe.bat           packages the app as a Windows .exe
 ```
 

@@ -16,6 +16,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from .fonts import get_comic_font_names
 from .generator import ProbeSheet
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
@@ -42,23 +43,41 @@ def export_pdf(
         title="Precision Teaching Probe Sheet",
     )
 
+    comic_regular, comic_bold = get_comic_font_names()
+
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
-        "PTTitle", parent=styles["Title"], fontSize=18, alignment=TA_CENTER, spaceAfter=6
+        "PTTitle",
+        parent=styles["Title"],
+        fontName=comic_bold,
+        fontSize=18,
+        alignment=TA_CENTER,
+        spaceAfter=6,
     )
     meta_style = ParagraphStyle(
-        "PTMeta", parent=styles["Normal"], fontSize=11, alignment=TA_CENTER, spaceAfter=2
+        "PTMeta",
+        parent=styles["Normal"],
+        fontName=comic_regular,
+        fontSize=11,
+        alignment=TA_CENTER,
+        spaceAfter=2,
     )
     word_style = ParagraphStyle(
         "PTWords",
         parent=styles["Normal"],
+        fontName=comic_regular,
         fontSize=12,
         alignment=TA_CENTER,
         textColor=colors.HexColor("#333333"),
         spaceAfter=8,
     )
     footer_style = ParagraphStyle(
-        "PTFooter", parent=styles["Normal"], fontSize=11, alignment=TA_CENTER, spaceBefore=10
+        "PTFooter",
+        parent=styles["Normal"],
+        fontName=comic_regular,
+        fontSize=11,
+        alignment=TA_CENTER,
+        spaceBefore=10,
     )
 
     usable_width = PAGE_WIDTH - 2 * MARGIN
@@ -88,8 +107,9 @@ def export_pdf(
             TableStyle(
                 [
                     ("GRID", (0, 0), (-1, -1), 0.75, colors.grey),
-                    ("FONTNAME", (1, 0), (-1, -1), "Helvetica-Bold"),
+                    ("FONTNAME", (1, 0), (-1, -1), comic_bold),
                     ("FONTSIZE", (1, 0), (-1, -1), grid_font_size),
+                    ("FONTNAME", (0, 0), (0, -1), comic_regular),
                     ("FONTSIZE", (0, 0), (0, -1), 9),
                     ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),

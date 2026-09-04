@@ -13,6 +13,11 @@ from .generator import ProbeSheet
 
 ROW_NUM_COL_CM = 1.0
 
+# Comic Sans MS ships with every edition of Windows, so referencing it by
+# name (rather than embedding a font file) is reliable for a Windows app -
+# Word just uses whatever copy is already installed on the machine.
+COMIC_FONT_NAME = "Comic Sans MS"
+
 
 def export_docx(
     sheets: list[ProbeSheet],
@@ -36,19 +41,24 @@ def export_docx(
     for sheet in sheets:
         title = doc.add_heading("Precision Teaching Probe Sheet", level=1)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in title.runs:
+            _set_run_font(run)
 
         meta = doc.add_paragraph()
         meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        meta.add_run(
+        meta_run = meta.add_run(
             f"Name: {sheet.child_name}     Date: {sheet.date_str}     "
             f"Sheet {sheet.sheet_number} of {sheet.total_sheets}"
-        ).bold = True
+        )
+        meta_run.bold = True
+        _set_run_font(meta_run)
 
         if include_word_list:
             wp = doc.add_paragraph()
             wp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = wp.add_run("Target words: " + ", ".join(sheet.words))
             run.italic = True
+            _set_run_font(run)
 
         table = doc.add_table(rows=sheet.rows, cols=sheet.cols + 1)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -66,10 +76,11 @@ def export_docx(
 
         footer = doc.add_paragraph()
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        footer.add_run(
+        footer_run = footer.add_run(
             "Time (seconds): _______     Correct: _______     "
             "Errors: _______     Correct per minute: _______"
         )
+        _set_run_font(footer_run)
 
         if sheet.sheet_number != sheet.total_sheets:
             doc.add_page_break()
@@ -84,6 +95,19 @@ def _set_cell_text(cell, text: str, size_pt: int, bold: bool) -> None:
     run = paragraph.add_run(text)
     run.font.size = Pt(size_pt)
     run.font.bold = bold
+    _set_run_font(run)
+
+
+def _set_run_font(run, name: str = COMIC_FONT_NAME) -> None:
+    run.font.name = name
+    # Word can pick a different font for the "complex script" slot even
+    # when w:ascii/w:hAnsi are set, so pin that explicitly too.
+    rpr = run._element.get_or_add_rPr()
+    rfonts = rpr.find(qn("w:rFonts"))
+    if rfonts is None:
+        rfonts = OxmlElement("w:rFonts")
+        rpr.append(rfonts)
+    rfonts.set(qn("w:cs"), name)
 
 
 def _set_column_widths(table, widths_cm: list[float]) -> None:
