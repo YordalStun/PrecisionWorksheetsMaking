@@ -2,11 +2,11 @@
 
 A small local desktop app for creating **Precision Teaching** practice
 materials from the same 5 target words: a probe sheet for fluency
-practice, plus two printable games. Enter a child's first name and 5
-words once, and generate any of the three as a printable **PDF** and/or
+practice, plus four printable games. Enter a child's first name and 5
+words once, and generate any of the five as a printable **PDF** and/or
 **Word (.docx)** file, ready to print in bulk.
 
-## The three activities
+## The five activities
 
 ### Probe sheets
 
@@ -45,6 +45,22 @@ plus a handful of squares showing one of the target words instead of a
 number - land on one and read it out loud for a bonus roll. Needs a die
 and a counter per player, which the app doesn't provide.
 
+### Bingo
+
+Each card is a shuffled 4x4 grid of the 5 words (so every word appears a
+few times per card, in a different arrangement on every card). Call out
+words one at a time - from the same 5-word list - and cross off every
+matching cell; first to complete a full line, across, down, or diagonal,
+shouts BINGO! Generates as many cards as you ask for, one per page.
+
+### Word Search
+
+The 5 words hidden in a grid of letters, reading across, down, or
+diagonally down-right (no backwards or upside-down words, to keep it
+approachable for early readers). The grid grows automatically to fit
+longer words. A quieter, independent activity - find and circle each
+word, then check it off the list underneath.
+
 Everything is set in **Comic Sans MS** (see the Fonts section below) for
 a friendly, easy-to-read look.
 
@@ -81,9 +97,9 @@ sandbox, so this step needs to be run once **on your own Windows PC**:
 
 1. Open the app.
 2. Enter the child's first name, the 5 words, and tick PDF and/or Word.
-3. Pick a tab - **Probe Sheets**, **Matching Pairs Game**, or **Snakes &
-   Ladders** - adjust that activity's options if you want, and click its
-   Generate button.
+3. Pick a tab - **Probe Sheets**, **Matching Pairs Game**, **Snakes &
+   Ladders**, **Bingo**, or **Word Search** - adjust that activity's
+   options if you want, and click its Generate button.
 4. Choose (or accept the default) output folder - it defaults to
    `Documents\PrecisionWorksheets`.
 5. The file(s) appear in that folder, ready to print. You can switch tabs
@@ -125,15 +141,18 @@ precision_worksheets/
   games/
     pairs_cards.py                  matching-pairs game -> PDF/Word
     snakes_and_ladders.py           board game (drawn with Pillow) -> PDF/Word
+    bingo.py                         bingo cards -> PDF/Word
+    word_search.py                   hidden-word puzzle -> PDF/Word
   assets/fonts/                    bundled Comic Neue fallback font + its licence
 tests/                              unit tests for the above
 build_windows_exe.bat               packages the app as a Windows .exe
 ```
 
 `generator.py`'s word-grid shuffling is deliberately independent of any
-one activity's PDF/Word/GUI code, so both games reuse it directly (the
-matching-pairs grid is literally the same function with each word
-appearing twice) rather than duplicating the shuffling rules.
+one activity's PDF/Word/GUI code, so the matching-pairs and bingo grids
+reuse it directly (each is literally the same function with a different
+grid shape / word-repeat count) rather than duplicating the shuffling
+rules.
 
 ## Running the tests
 
@@ -142,15 +161,17 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-These cover the word-shuffling logic, both games' board/card generation,
-and all exporters. The GUI itself was exercised end-to-end in this
-sandbox using a virtual display (Xvfb) to drive the real Tkinter widgets
-and confirm each tab's generate/validate flow doesn't crash and produces
-correct files - but it hasn't been visually checked on an actual Windows
-desktop yet, so it's worth a quick look once you have it running there.
+These cover the word-shuffling logic, every game's board/card/puzzle
+generation (including that every Word Search word is actually findable
+in its grid), and all exporters. The GUI itself was exercised end-to-end
+in this sandbox using a virtual display (Xvfb) to drive the real Tkinter
+widgets and confirm each tab's generate/validate flow doesn't crash and
+produces correct files - but it hasn't been visually checked on an
+actual Windows desktop yet, so it's worth a quick look once you have it
+running there.
 
 ## Roadmap
 
-More game ideas were floated (bingo, a word search, a roll-and-read race
-track, a spinner game, snap) but aren't built yet - this covers probe
-sheets, the matching pairs game, and Snakes & Ladders.
+More game ideas were floated (a roll-and-read race track, a spinner
+game, snap) but aren't built yet - this covers probe sheets, matching
+pairs, Snakes & Ladders, bingo, and word search.

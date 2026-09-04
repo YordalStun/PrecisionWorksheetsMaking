@@ -16,8 +16,10 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .docx_export import export_docx
+from .games.bingo import build_bingo_cards, export_bingo_docx, export_bingo_pdf
 from .games.pairs_cards import build_pairs_card_sheet, export_pairs_cards_docx, export_pairs_cards_pdf
 from .games.snakes_and_ladders import build_board, export_board_docx, export_board_pdf
+from .games.word_search import build_word_search, export_word_search_docx, export_word_search_pdf
 from .generator import build_probe_sheets
 from .pdf_export import export_pdf
 
@@ -39,6 +41,7 @@ class PrecisionWorksheetApp:
         self.cols_var = tk.IntVar(value=5)
         self.font_size_var = tk.IntVar(value=20)
         self.show_word_list_var = tk.BooleanVar(value=True)
+        self.bingo_cards_var = tk.IntVar(value=4)
         self.make_pdf_var = tk.BooleanVar(value=True)
         self.make_docx_var = tk.BooleanVar(value=True)
         self.output_dir_var = tk.StringVar(value=DEFAULT_OUTPUT_DIR)
@@ -95,6 +98,8 @@ class PrecisionWorksheetApp:
         notebook.add(self._build_probe_sheet_tab(notebook), text="Probe Sheets")
         notebook.add(self._build_pairs_tab(notebook), text="Matching Pairs Game")
         notebook.add(self._build_snakes_tab(notebook), text="Snakes & Ladders")
+        notebook.add(self._build_bingo_tab(notebook), text="Bingo")
+        notebook.add(self._build_word_search_tab(notebook), text="Word Search")
 
     def _build_probe_sheet_tab(self, notebook: ttk.Notebook) -> ttk.Frame:
         tab = ttk.Frame(notebook, padding=12)
@@ -151,6 +156,34 @@ class PrecisionWorksheetApp:
             "land on one and read it out loud for a bonus roll.", justify="left",
         ).grid(row=0, column=0, sticky="w", pady=(0, 14))
         ttk.Button(tab, text="Generate Snakes & Ladders board", command=self._on_generate_snakes_and_ladders).grid(
+            row=1, column=0, sticky="w"
+        )
+        return tab
+
+    def _build_bingo_tab(self, notebook: ttk.Notebook) -> ttk.Frame:
+        tab = ttk.Frame(notebook, padding=12)
+        ttk.Label(
+            tab, text="Each card has a shuffled 4x4 grid of the 5 words. Call out\n"
+            "words one at a time - first to complete a line shouts BINGO!", justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+
+        ttk.Label(tab, text="Number of cards to print:").grid(row=1, column=0, sticky="w")
+        ttk.Spinbox(tab, from_=1, to=30, textvariable=self.bingo_cards_var, width=6).grid(
+            row=1, column=1, sticky="w", padx=(6, 0)
+        )
+
+        ttk.Button(tab, text="Generate bingo cards", command=self._on_generate_bingo).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(14, 0)
+        )
+        return tab
+
+    def _build_word_search_tab(self, notebook: ttk.Notebook) -> ttk.Frame:
+        tab = ttk.Frame(notebook, padding=12)
+        ttk.Label(
+            tab, text="The 5 words hidden in a grid of letters - find and circle\n"
+            "them going across, down, or diagonally.", justify="left",
+        ).grid(row=0, column=0, sticky="w", pady=(0, 14))
+        ttk.Button(tab, text="Generate word search", command=self._on_generate_word_search).grid(
             row=1, column=0, sticky="w"
         )
         return tab
@@ -332,6 +365,80 @@ class PrecisionWorksheetApp:
                 output_dir, base_name, make_pdf, make_docx,
                 pdf_fn=lambda path: export_board_pdf(board, path),
                 docx_fn=lambda path: export_board_docx(board, path),
+            )
+        except OSError as exc:
+            self._show_save_error(exc)
+            return
+
+        self._finish(written, output_dir)
+
+    # ------------------------------------------------------------------
+    # Bingo
+    # ------------------------------------------------------------------
+    def _on_generate_bingo(self) -> None:
+        self.status_var.set("")
+        try:
+            child_name, words, date_str = self._collect_child_and_words()
+            make_pdf, make_docx, output_dir = self._collect_output_options()
+            try:
+                num_cards = int(self.bingo_cards_var.get())
+            except (tk.TclError, ValueError):
+                raise ValueError("Number of cards must be a whole number.")
+            if not (1 <= num_cards <= 30):
+                raise ValueError("Number of cards must be between 1 and 30.")
+        except ValueError as exc:
+            messagebox.showerror("Check your details", str(exc))
+            return
+
+        if not self._ensure_output_dir(output_dir):
+            return
+
+        try:
+            cards = build_bingo_cards(child_name, words, date_str, num_cards=num_cards)
+        except ValueError as exc:
+            messagebox.showerror("Couldn't build the cards", str(exc))
+            return
+
+        base_name = _safe_filename(f"{child_name}_bingo")
+        try:
+            written = self._write_outputs(
+                output_dir, base_name, make_pdf, make_docx,
+                pdf_fn=lambda path: export_bingo_pdf(cards, path),
+                docx_fn=lambda path: export_bingo_docx(cards, path),
+            )
+        except OSError as exc:
+            self._show_save_error(exc)
+            return
+
+        self._finish(written, output_dir)
+
+    # ------------------------------------------------------------------
+    # Word Search
+    # ------------------------------------------------------------------
+    def _on_generate_word_search(self) -> None:
+        self.status_var.set("")
+        try:
+            child_name, words, _date_str = self._collect_child_and_words()
+            make_pdf, make_docx, output_dir = self._collect_output_options()
+        except ValueError as exc:
+            messagebox.showerror("Check your details", str(exc))
+            return
+
+        if not self._ensure_output_dir(output_dir):
+            return
+
+        try:
+            puzzle = build_word_search(child_name, words)
+        except ValueError as exc:
+            messagebox.showerror("Couldn't build the puzzle", str(exc))
+            return
+
+        base_name = _safe_filename(f"{child_name}_word_search")
+        try:
+            written = self._write_outputs(
+                output_dir, base_name, make_pdf, make_docx,
+                pdf_fn=lambda path: export_word_search_pdf(puzzle, path),
+                docx_fn=lambda path: export_word_search_docx(puzzle, path),
             )
         except OSError as exc:
             self._show_save_error(exc)
