@@ -25,18 +25,30 @@ PAGE_WIDTH, PAGE_HEIGHT = A4
 # of the page as possible.
 MARGIN = 10 * mm
 
+# Rough space the header (title/name/word list) and footer (scoring line)
+# take up, used to work out how much vertical room is left for the grid
+# itself - padded a little over the true value so an estimation error
+# never quietly pushes a sheet onto an extra page.
+_HEADER_HEIGHT_WITH_WORDLIST = 85
+_HEADER_HEIGHT_WITHOUT_WORDLIST = 60
+_FOOTER_HEIGHT = 32
+_GRID_LEADING_FACTOR = 1.15
+_MIN_ROW_PADDING = 10
+
 
 def export_pdf(
     sheets: list[ProbeSheet],
     output_path: str,
     include_word_list: bool = True,
-    grid_font_size: int = 60,
+    grid_font_size: int = 20,
 ) -> None:
     """Write `sheets` to `output_path` as a single multi-page PDF.
 
-    `grid_font_size` is a ceiling, not a fixed size: each sheet's words are
-    drawn as large as they can be while still fitting on one line in their
-    box, up to this cap.
+    `grid_font_size` is a ceiling, not a fixed size: a word only shrinks
+    below it if it wouldn't otherwise fit on one line in its box. The boxes
+    themselves are padded to fill the space left on the page after the
+    header/footer, so the grid uses as much of the sheet as it can without
+    needing the text itself to be huge.
     """
     if not sheets:
         raise ValueError("No sheets to export")
@@ -137,6 +149,16 @@ def export_pdf(
         ]
         col_widths = [row_num_width] + [grid_col_width] * sheet.cols
 
+        # Pad each row so the grid stretches to fill the space left on the
+        # page below the header/footer, rather than leaving it mostly blank.
+        header_height = (
+            _HEADER_HEIGHT_WITH_WORDLIST if include_word_list else _HEADER_HEIGHT_WITHOUT_WORDLIST
+        )
+        available_grid_height = (PAGE_HEIGHT - 2 * MARGIN) - header_height - _FOOTER_HEIGHT
+        target_row_height = available_grid_height / sheet.rows
+        text_block_height = fitted_font_size * _GRID_LEADING_FACTOR
+        vertical_padding = max(_MIN_ROW_PADDING, (target_row_height - text_block_height) / 2)
+
         table = Table(data, colWidths=col_widths, repeatRows=0)
         table.setStyle(
             TableStyle(
@@ -146,8 +168,8 @@ def export_pdf(
                     ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eeeeee")),
                     ("LEFTPADDING", (0, 0), (-1, -1), 6),
                     ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                    ("TOPPADDING", (0, 0), (-1, -1), 10),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                    ("TOPPADDING", (0, 0), (-1, -1), vertical_padding),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), vertical_padding),
                 ]
             )
         )

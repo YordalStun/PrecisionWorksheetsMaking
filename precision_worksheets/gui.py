@@ -35,7 +35,7 @@ class PrecisionWorksheetApp:
         self.sheets_var = tk.IntVar(value=5)
         self.rows_var = tk.IntVar(value=4)
         self.cols_var = tk.IntVar(value=5)
-        self.font_size_var = tk.IntVar(value=60)
+        self.font_size_var = tk.IntVar(value=20)
         self.show_word_list_var = tk.BooleanVar(value=True)
         self.make_pdf_var = tk.BooleanVar(value=True)
         self.make_docx_var = tk.BooleanVar(value=True)

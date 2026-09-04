@@ -21,6 +21,19 @@ ROW_NUM_COL_CM = 0.8
 PAGE_WIDTH_CM = 21.0
 PAGE_HEIGHT_CM = 29.7
 
+# Rough space the header (title/name/word list) and footer (scoring line)
+# take up, used to work out how much vertical room is left for the grid
+# itself - padded well over the true value so an estimation error never
+# quietly pushes a sheet onto a near-blank extra page. Word's built-in
+# "Heading 1" style carries its own template spacing that runs taller than
+# its font size alone would suggest, so this needs more headroom than the
+# equivalent estimate in pdf_export.py.
+_HEADER_HEIGHT_WITH_WORDLIST_PT = 130
+_HEADER_HEIGHT_WITHOUT_WORDLIST_PT = 105
+_FOOTER_HEIGHT_PT = 50
+_GRID_LEADING_FACTOR = 1.15
+_MIN_ROW_PADDING_PT = 10
+
 # Comic Sans MS ships with every edition of Windows, so referencing it by
 # name (rather than embedding a font file) is reliable for a Windows app -
 # Word just uses whatever copy is already installed on the machine.
@@ -31,13 +44,15 @@ def export_docx(
     sheets: list[ProbeSheet],
     output_path: str,
     include_word_list: bool = True,
-    grid_font_size: int = 60,
+    grid_font_size: int = 20,
 ) -> None:
     """Write `sheets` to `output_path` as a single multi-page .docx file.
 
-    `grid_font_size` is a ceiling, not a fixed size: each sheet's words are
-    drawn as large as they can be while still fitting on one line in their
-    box, up to this cap.
+    `grid_font_size` is a ceiling, not a fixed size: a word only shrinks
+    below it if it wouldn't otherwise fit on one line in its box. The boxes
+    themselves are padded to fill the space left on the page after the
+    header/footer, so the grid uses as much of the sheet as it can without
+    needing the text itself to be huge.
     """
     if not sheets:
         raise ValueError("No sheets to export")
@@ -83,14 +98,25 @@ def export_docx(
 
         col_width_cm = (usable_width_cm - ROW_NUM_COL_CM) / sheet.cols
         _set_column_widths(table, [ROW_NUM_COL_CM] + [col_width_cm] * sheet.cols)
-        _set_cell_margins(table, top_pt=14, bottom_pt=14, left_pt=6, right_pt=6)
 
-        # Words are drawn as big as they can be while still fitting on one
-        # line in their box, up to grid_font_size - grows short words up,
-        # shrinks long words down, never lets text spill over the lines.
+        # A word only shrinks below grid_font_size if it wouldn't otherwise
+        # fit on one line in its box.
         fitted_font_size = fit_grid_font_size(
             sheet.words, grid_font_size, col_width_cm * POINTS_PER_CM
         )
+
+        # Pad each row so the grid stretches to fill the space left on the
+        # page below the header/footer, rather than leaving it mostly blank.
+        header_height = (
+            _HEADER_HEIGHT_WITH_WORDLIST_PT if include_word_list else _HEADER_HEIGHT_WITHOUT_WORDLIST_PT
+        )
+        page_height_pt = PAGE_HEIGHT_CM * POINTS_PER_CM
+        margins_pt = (section.top_margin + section.bottom_margin) / Cm(1) * POINTS_PER_CM
+        available_grid_height = page_height_pt - margins_pt - header_height - _FOOTER_HEIGHT_PT
+        target_row_height = available_grid_height / sheet.rows
+        text_block_height = fitted_font_size * _GRID_LEADING_FACTOR
+        vertical_padding = max(_MIN_ROW_PADDING_PT, (target_row_height - text_block_height) / 2)
+        _set_cell_margins(table, top_pt=vertical_padding, bottom_pt=vertical_padding, left_pt=6, right_pt=6)
 
         for r, row_words in enumerate(sheet.grid):
             cells = table.rows[r].cells
