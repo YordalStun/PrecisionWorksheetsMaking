@@ -2,11 +2,11 @@
 
 A small local desktop app for creating **Precision Teaching** practice
 materials from the same 5 target words: a probe sheet for fluency
-practice, plus four printable games. Enter a child's first name and 5
-words once, and generate any of the five as a printable **PDF** and/or
+practice, plus six printable games/sheets. Enter a child's first name and
+5 words once, and generate any of the seven as a printable **PDF** and/or
 **Word (.docx)** file, ready to print in bulk.
 
-## The five activities
+## The seven activities
 
 ### Probe sheets
 
@@ -61,6 +61,23 @@ approachable for early readers). The grid grows automatically to fit
 longer words. A quieter, independent activity - find and circle each
 word, then check it off the list underneath.
 
+### Word Trail
+
+A winding, boustrophedon path of 27 word circles from a green **Start**
+to a gold **Finish**, connected by a hand-drawn, wiggly (rather than
+straight) trail - the same 5 words repeated, shuffled, and evenly
+distributed along it. Needs a die and a counter per player: take turns
+rolling and moving that many circles along the trail, reading each word
+out loud as you land on it. Available as A4, or an A3 "bigger" variant
+(same 27 circles, just larger) - pick the paper size on its tab.
+
+### Large Print Words
+
+Each of the 5 words shown alone, as big as possible, one per landscape
+page - nothing else on the page. Handy for holding a word up at a
+distance, or for a child who benefits from bigger print than a shared
+grid/board can offer.
+
 Everything is set in **Comic Sans MS** (see the Fonts section below) for
 a friendly, easy-to-read look.
 
@@ -98,8 +115,9 @@ sandbox, so this step needs to be run once **on your own Windows PC**:
 1. Open the app.
 2. Enter the child's first name, the 5 words, and tick PDF and/or Word.
 3. Pick a tab - **Probe Sheets**, **Matching Pairs Game**, **Snakes &
-   Ladders**, **Bingo**, or **Word Search** - adjust that activity's
-   options if you want, and click its Generate button.
+   Ladders**, **Bingo**, **Word Search**, **Word Trail**, or **Large Print
+   Words** - adjust that activity's options if you want, and click its
+   Generate button.
 4. Choose (or accept the default) output folder - it defaults to
    `Documents\PrecisionWorksheets`.
 5. The file(s) appear in that folder, ready to print. You can switch tabs
@@ -114,14 +132,15 @@ shipped with every edition of Windows since 3.1), so:
 - **Word (.docx) files** just reference it by name - Word uses whatever
   copy is already installed on the PC that opens the file, which on
   Windows is always the real thing.
-- **PDF files**, and the Snakes & Ladders board image, need an actual font
-  *file* at the point they're built. The app looks for the real
-  `C:\Windows\Fonts\comic.ttf` (and `comicbd.ttf` for bold) on the machine
-  it's running on and uses those. We don't bundle Comic Sans MS in this
-  repo ourselves - it's a Microsoft font and redistributing the file isn't
-  allowed - but since it's already on essentially every Windows PC, the app
-  finds it automatically. If it's ever missing: PDF text falls back to a
-  plain built-in font, and the board image falls back to a bundled copy of
+- **PDF files**, and any image-based page (the Snakes & Ladders board, the
+  Word Trail, Large Print Words), need an actual font *file* at the point
+  they're built. The app looks for the real `C:\Windows\Fonts\comic.ttf`
+  (and `comicbd.ttf` for bold) on the machine it's running on and uses
+  those. We don't bundle Comic Sans MS in this repo ourselves - it's a
+  Microsoft font and redistributing the file isn't allowed - but since
+  it's already on essentially every Windows PC, the app finds it
+  automatically. If it's ever missing: PDF text falls back to a plain
+  built-in font, and image-based pages fall back to a bundled copy of
   [Comic Neue](https://github.com/crozynski/comicneue) (a free, open-licence
   Comic Sans lookalike - see `precision_worksheets/assets/fonts/OFL.txt`),
   rather than either one crashing (see `precision_worksheets/fonts.py`).
@@ -137,12 +156,15 @@ precision_worksheets/
   pdf_export.py                    probe sheets -> PDF (reportlab)
   docx_export.py                    probe sheets -> Word doc (python-docx)
   docx_helpers.py                  shared python-docx table helpers
+  large_print.py                   large-print single-word pages -> PDF/Word
   gui.py                            the Tkinter window that ties it together
   games/
+    _drawing.py                     shared Pillow drawing/export helpers for image-based pages
     pairs_cards.py                  matching-pairs game -> PDF/Word
     snakes_and_ladders.py           board game (drawn with Pillow) -> PDF/Word
     bingo.py                         bingo cards -> PDF/Word
     word_search.py                   hidden-word puzzle -> PDF/Word
+    word_trail.py                    winding word-circle trail (drawn with Pillow) -> PDF/Word
   assets/fonts/                    bundled Comic Neue fallback font + its licence
 tests/                              unit tests for the above
 build_windows_exe.bat               packages the app as a Windows .exe
@@ -172,6 +194,6 @@ running there.
 
 ## Roadmap
 
-More game ideas were floated (a roll-and-read race track, a spinner
-game, snap) but aren't built yet - this covers probe sheets, matching
-pairs, Snakes & Ladders, bingo, and word search.
+More game ideas were floated (a spinner game, snap) but aren't built yet
+- this covers probe sheets, matching pairs, Snakes & Ladders, bingo, word
+search, word trail, and large print words.

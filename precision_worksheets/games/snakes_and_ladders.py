@@ -10,7 +10,6 @@ always look identical.
 
 from __future__ import annotations
 
-import io
 import math
 import random
 from dataclasses import dataclass, field
@@ -18,6 +17,7 @@ from dataclasses import dataclass, field
 from PIL import Image, ImageDraw, ImageFont
 
 from ..fonts import get_board_font_paths
+from ._drawing import export_full_page_image_docx, export_full_page_image_pdf, fit_font, wrap_text
 
 BOARD_SIZE = 10  # 10 x 10 = 100 squares
 N_LADDERS = 6
@@ -114,35 +114,6 @@ def _square_center(n: int) -> tuple[int, int]:
     return x, y
 
 
-def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: float) -> list[str]:
-    """Greedily wrap `text` onto lines that each fit within max_width."""
-    words = text.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
-        candidate = f"{current} {word}".strip()
-        box = draw.textbbox((0, 0), candidate, font=font)
-        if box[2] - box[0] <= max_width or not current:
-            current = candidate
-        else:
-            lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines
-
-
-def _fit_font(draw: ImageDraw.ImageDraw, text: str, font_path: str, max_size: int, max_width: int, min_size: int = 14) -> ImageFont.FreeTypeFont:
-    size = max_size
-    while size > min_size:
-        font = ImageFont.truetype(font_path, size)
-        box = draw.textbbox((0, 0), text, font=font)
-        if box[2] - box[0] <= max_width:
-            return font
-        size -= 2
-    return ImageFont.truetype(font_path, min_size)
-
-
 def _perpendicular(dx: float, dy: float) -> tuple[float, float]:
     length = math.hypot(dx, dy) or 1
     return -dy / length, dx / length
@@ -175,14 +146,14 @@ def _draw_snake(draw: ImageDraw.ImageDraw, head: tuple[int, int], tail: tuple[in
     dx, dy = x2 - x1, y2 - y1
     length = math.hypot(dx, dy)
     px, py = _perpendicular(dx, dy)
-    waves = max(1, round(length / 130))
+    waves = max(3, round(length / 65))
     n = max(20, int(length / 8))
-    width = 15
+    width = 14
     points = []
     for i in range(n + 1):
         t = i / n
         bx, by = x1 + dx * t, y1 + dy * t
-        offset = math.sin(t * math.pi * waves) * 28 * (1 - 0.35 * t)
+        offset = math.sin(t * math.pi * waves) * 24 * (1 - 0.35 * t)
         points.append((bx + px * offset, by + py * offset))
     draw.line(points, fill=COLOR_SNAKE, width=width, joint="curve")
     hx, hy = points[0]
@@ -237,7 +208,7 @@ def render_board_image(board: SnakesAndLaddersBoard) -> Image.Image:
 
             if is_word_square:
                 word = board.word_squares[n]
-                font = _fit_font(draw, word, bold_path, int(S(46)), int(S(CELL_SIZE - 24)))
+                font = fit_font(draw, word, bold_path, int(S(46)), int(S(CELL_SIZE - 24)))
                 box = draw.textbbox((0, 0), word, font=font)
                 tw, th = box[2] - box[0], box[3] - box[1]
                 draw.text(
@@ -282,7 +253,7 @@ def render_board_image(board: SnakesAndLaddersBoard) -> Image.Image:
         "and moving your counter that many squares. First to reach square "
         "100 wins!"
     )
-    for line in _wrap_text(draw, instructions, legend_font, S(BOARD_PIXELS)):
+    for line in wrap_text(draw, instructions, legend_font, S(BOARD_PIXELS)):
         draw.text((S(BOARD_LEFT), S(line_y)), line, font=legend_font, fill=COLOR_MUTED)
         line_y += 38
 
@@ -299,61 +270,9 @@ def _square_number_at(row: int, col: int) -> int:
     return row_from_bottom * BOARD_SIZE + col_in_row + 1
 
 
-def _image_to_png_bytes(img: Image.Image) -> bytes:
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
-
-
 def export_board_pdf(board: SnakesAndLaddersBoard, output_path: str) -> None:
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import mm
-    from reportlab.platypus import Image as RLImage, SimpleDocTemplate
-
-    img = render_board_image(board)
-    png_bytes = _image_to_png_bytes(img)
-
-    margin = 8 * mm
-    doc = SimpleDocTemplate(
-        output_path, pagesize=A4,
-        topMargin=margin, bottomMargin=margin, leftMargin=margin, rightMargin=margin,
-        title="Snakes and Ladders",
-    )
-    page_width, page_height = A4
-    usable_width = page_width - 2 * margin
-    usable_height = page_height - 2 * margin
-    aspect = IMG_HEIGHT / IMG_WIDTH
-    draw_width = usable_width
-    draw_height = draw_width * aspect
-    if draw_height > usable_height:
-        draw_height = usable_height
-        draw_width = draw_height / aspect
-
-    rl_image = RLImage(io.BytesIO(png_bytes), width=draw_width, height=draw_height)
-    doc.build([rl_image])
+    export_full_page_image_pdf(render_board_image(board), output_path, title="Snakes and Ladders")
 
 
 def export_board_docx(board: SnakesAndLaddersBoard, output_path: str) -> None:
-    from docx import Document
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Cm
-
-    img = render_board_image(board)
-    png_bytes = _image_to_png_bytes(img)
-
-    doc = Document()
-    section = doc.sections[0]
-    # A4 portrait, set explicitly rather than relying on Word's default
-    # template (which isn't guaranteed to be A4).
-    section.page_width = Cm(21.0)
-    section.page_height = Cm(29.7)
-    section.left_margin = Cm(0.8)
-    section.right_margin = Cm(0.8)
-    section.top_margin = Cm(0.8)
-    section.bottom_margin = Cm(0.8)
-    usable_width_cm = (section.page_width - section.left_margin - section.right_margin) / Cm(1)
-
-    paragraph = doc.add_paragraph()
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    paragraph.add_run().add_picture(io.BytesIO(png_bytes), width=Cm(usable_width_cm))
-    doc.save(output_path)
+    export_full_page_image_docx(render_board_image(board), output_path)

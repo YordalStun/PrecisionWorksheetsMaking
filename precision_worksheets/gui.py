@@ -20,7 +20,9 @@ from .games.bingo import build_bingo_cards, export_bingo_docx, export_bingo_pdf
 from .games.pairs_cards import build_pairs_card_sheet, export_pairs_cards_docx, export_pairs_cards_pdf
 from .games.snakes_and_ladders import build_board, export_board_docx, export_board_pdf
 from .games.word_search import build_word_search, export_word_search_docx, export_word_search_pdf
+from .games.word_trail import build_word_trail, export_word_trail_docx, export_word_trail_pdf
 from .generator import build_probe_sheets
+from .large_print import build_large_print_pages, export_large_print_docx, export_large_print_pdf
 from .pdf_export import export_pdf
 
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "Documents", "PrecisionWorksheets")
@@ -42,6 +44,7 @@ class PrecisionWorksheetApp:
         self.font_size_var = tk.IntVar(value=20)
         self.show_word_list_var = tk.BooleanVar(value=True)
         self.bingo_cards_var = tk.IntVar(value=4)
+        self.trail_page_size_var = tk.StringVar(value="A4")
         self.make_pdf_var = tk.BooleanVar(value=True)
         self.make_docx_var = tk.BooleanVar(value=True)
         self.output_dir_var = tk.StringVar(value=DEFAULT_OUTPUT_DIR)
@@ -100,6 +103,8 @@ class PrecisionWorksheetApp:
         notebook.add(self._build_snakes_tab(notebook), text="Snakes & Ladders")
         notebook.add(self._build_bingo_tab(notebook), text="Bingo")
         notebook.add(self._build_word_search_tab(notebook), text="Word Search")
+        notebook.add(self._build_word_trail_tab(notebook), text="Word Trail")
+        notebook.add(self._build_large_print_tab(notebook), text="Large Print Words")
 
     def _build_probe_sheet_tab(self, notebook: ttk.Notebook) -> ttk.Frame:
         tab = ttk.Frame(notebook, padding=12)
@@ -184,6 +189,39 @@ class PrecisionWorksheetApp:
             "them going across, down, or diagonally.", justify="left",
         ).grid(row=0, column=0, sticky="w", pady=(0, 14))
         ttk.Button(tab, text="Generate word search", command=self._on_generate_word_search).grid(
+            row=1, column=0, sticky="w"
+        )
+        return tab
+
+    def _build_word_trail_tab(self, notebook: ttk.Notebook) -> ttk.Frame:
+        tab = ttk.Frame(notebook, padding=12)
+        ttk.Label(
+            tab, text="A winding path of word circles from Start to Finish -\n"
+            "read each word aloud as you make your way along the trail.", justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+
+        ttk.Label(tab, text="Paper size:").grid(row=1, column=0, sticky="w")
+        sizes = ttk.Frame(tab)
+        sizes.grid(row=1, column=1, sticky="w", padx=(6, 0))
+        ttk.Radiobutton(sizes, text="A4", variable=self.trail_page_size_var, value="A4").grid(
+            row=0, column=0, sticky="w"
+        )
+        ttk.Radiobutton(sizes, text="A3 (bigger)", variable=self.trail_page_size_var, value="A3").grid(
+            row=0, column=1, sticky="w", padx=(10, 0)
+        )
+
+        ttk.Button(tab, text="Generate word trail", command=self._on_generate_word_trail).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(14, 0)
+        )
+        return tab
+
+    def _build_large_print_tab(self, notebook: ttk.Notebook) -> ttk.Frame:
+        tab = ttk.Frame(notebook, padding=12)
+        ttk.Label(
+            tab, text="Each word alone, as big as possible, one per landscape\n"
+            "page - handy for holding up or for a child who needs bigger print.", justify="left",
+        ).grid(row=0, column=0, sticky="w", pady=(0, 14))
+        ttk.Button(tab, text="Generate large print words", command=self._on_generate_large_print).grid(
             row=1, column=0, sticky="w"
         )
         return tab
@@ -439,6 +477,75 @@ class PrecisionWorksheetApp:
                 output_dir, base_name, make_pdf, make_docx,
                 pdf_fn=lambda path: export_word_search_pdf(puzzle, path),
                 docx_fn=lambda path: export_word_search_docx(puzzle, path),
+            )
+        except OSError as exc:
+            self._show_save_error(exc)
+            return
+
+        self._finish(written, output_dir)
+
+    # ------------------------------------------------------------------
+    # Word Trail
+    # ------------------------------------------------------------------
+    def _on_generate_word_trail(self) -> None:
+        self.status_var.set("")
+        try:
+            child_name, words, _date_str = self._collect_child_and_words()
+            make_pdf, make_docx, output_dir = self._collect_output_options()
+        except ValueError as exc:
+            messagebox.showerror("Check your details", str(exc))
+            return
+
+        if not self._ensure_output_dir(output_dir):
+            return
+
+        try:
+            trail = build_word_trail(child_name, words)
+        except ValueError as exc:
+            messagebox.showerror("Couldn't build the trail", str(exc))
+            return
+
+        page_size = self.trail_page_size_var.get()
+        base_name = _safe_filename(f"{child_name}_word_trail_{page_size}")
+        try:
+            written = self._write_outputs(
+                output_dir, base_name, make_pdf, make_docx,
+                pdf_fn=lambda path: export_word_trail_pdf(trail, path, page_size=page_size),
+                docx_fn=lambda path: export_word_trail_docx(trail, path, page_size=page_size),
+            )
+        except OSError as exc:
+            self._show_save_error(exc)
+            return
+
+        self._finish(written, output_dir)
+
+    # ------------------------------------------------------------------
+    # Large Print Words
+    # ------------------------------------------------------------------
+    def _on_generate_large_print(self) -> None:
+        self.status_var.set("")
+        try:
+            child_name, words, _date_str = self._collect_child_and_words()
+            make_pdf, make_docx, output_dir = self._collect_output_options()
+        except ValueError as exc:
+            messagebox.showerror("Check your details", str(exc))
+            return
+
+        if not self._ensure_output_dir(output_dir):
+            return
+
+        try:
+            pages = build_large_print_pages(words)
+        except ValueError as exc:
+            messagebox.showerror("Couldn't build the pages", str(exc))
+            return
+
+        base_name = _safe_filename(f"{child_name}_large_print_words")
+        try:
+            written = self._write_outputs(
+                output_dir, base_name, make_pdf, make_docx,
+                pdf_fn=lambda path: export_large_print_pdf(pages, path),
+                docx_fn=lambda path: export_large_print_docx(pages, path),
             )
         except OSError as exc:
             self._show_save_error(exc)
