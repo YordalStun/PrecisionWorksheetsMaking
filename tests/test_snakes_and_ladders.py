@@ -101,6 +101,55 @@ class TestSnakesAndLaddersExport(unittest.TestCase):
         self.assertAlmostEqual(section.page_width / Cm(1), 21.0, places=1)
         self.assertAlmostEqual(section.page_height / Cm(1), 29.7, places=1)
 
+    def test_word_squares_are_redrawn_on_top_of_ladders_and_snakes(self):
+        """A ladder/snake between two other squares can pass straight
+        through a word square along the way - it must not end up drawn
+        over that word square's fill/text, or the word becomes unreadable."""
+        from unittest import mock
+
+        from PIL import ImageDraw
+
+        from precision_worksheets.games import snakes_and_ladders as sal
+
+        board = build_board("Alex", ["cat", "dog", "sun", "run", "big"], seed=1)
+        self.assertTrue(board.ladders)
+        self.assertTrue(board.snakes)
+
+        events: list[tuple[str, int]] = []
+        orig_rectangle = ImageDraw.ImageDraw.rectangle
+        orig_draw_ladder = sal._draw_ladder
+        orig_draw_snake = sal._draw_snake
+
+        def tracking_rectangle(self, xy, fill=None, **kwargs):
+            # Only count full board-cell fills, not the small legend swatch
+            # (drawn later, also in COLOR_WORD_SQUARE, but not a cell).
+            is_cell_sized = abs((xy[2] - xy[0]) - sal.CELL_SIZE * sal.SUPERSAMPLE) < 1
+            if fill == sal.COLOR_WORD_SQUARE and is_cell_sized:
+                events.append(("word_square", len(events)))
+            return orig_rectangle(self, xy, fill=fill, **kwargs)
+
+        def tracking_ladder(*args, **kwargs):
+            events.append(("ladder", len(events)))
+            return orig_draw_ladder(*args, **kwargs)
+
+        def tracking_snake(*args, **kwargs):
+            events.append(("snake", len(events)))
+            return orig_draw_snake(*args, **kwargs)
+
+        with mock.patch.object(ImageDraw.ImageDraw, "rectangle", tracking_rectangle), \
+             mock.patch.object(sal, "_draw_ladder", tracking_ladder), \
+             mock.patch.object(sal, "_draw_snake", tracking_snake):
+            sal.render_board_image(board)
+
+        last_feature_index = max(i for kind, i in events if kind in ("ladder", "snake"))
+        word_square_indices = [i for kind, i in events if kind == "word_square"]
+        # Every word square is filled twice: once in the initial grid pass,
+        # then again afterwards - that final redraw must land after every
+        # ladder and snake so it's the last thing painted there.
+        self.assertEqual(len(word_square_indices), 2 * len(board.word_squares))
+        final_redraws = word_square_indices[-len(board.word_squares):]
+        self.assertTrue(all(i > last_feature_index for i in final_redraws))
+
 
 if __name__ == "__main__":
     unittest.main()

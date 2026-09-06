@@ -191,38 +191,48 @@ def render_board_image(board: SnakesAndLaddersBoard) -> Image.Image:
     centered_text(50, "Snakes & Ladders", title_font)
     centered_text(120, f"for {board.child_name}", subtitle_font, fill=COLOR_MUTED)
 
+    def draw_word_square(n: int) -> None:
+        cx, cy = _square_center(n)
+        x0 = S(cx - CELL_SIZE / 2)
+        y0 = S(cy - CELL_SIZE / 2)
+        x1 = x0 + S(CELL_SIZE)
+        y1 = y0 + S(CELL_SIZE)
+        draw.rectangle([x0, y0, x1, y1], fill=COLOR_WORD_SQUARE, outline=COLOR_GRID, width=max(1, int(S(1.5))))
+        word = board.word_squares[n]
+        font = fit_font(draw, word, bold_path, int(S(46)), int(S(CELL_SIZE - 24)))
+        box = draw.textbbox((0, 0), word, font=font)
+        tw, th = box[2] - box[0], box[3] - box[1]
+        draw.text(
+            (x0 + S(CELL_SIZE) / 2 - tw / 2, y0 + S(CELL_SIZE) / 2 - th / 2 - box[1]),
+            word, font=font, fill=COLOR_TEXT,
+        )
+
     # Board squares
     for row in range(BOARD_SIZE):
         for col in range(BOARD_SIZE):
             n = _square_number_at(row, col)
+            if n in board.word_squares:
+                draw_word_square(n)
+                continue
             x0 = S(BOARD_LEFT + col * CELL_SIZE)
             y0 = S(BOARD_TOP + row * CELL_SIZE)
             x1 = x0 + S(CELL_SIZE)
             y1 = y0 + S(CELL_SIZE)
-            is_word_square = n in board.word_squares
-            if is_word_square:
-                fill = COLOR_WORD_SQUARE
-            else:
-                fill = COLOR_CELL_A if (row + col) % 2 == 0 else COLOR_CELL_B
+            fill = COLOR_CELL_A if (row + col) % 2 == 0 else COLOR_CELL_B
             draw.rectangle([x0, y0, x1, y1], fill=fill, outline=COLOR_GRID, width=max(1, int(S(1.5))))
-
-            if is_word_square:
-                word = board.word_squares[n]
-                font = fit_font(draw, word, bold_path, int(S(46)), int(S(CELL_SIZE - 24)))
-                box = draw.textbbox((0, 0), word, font=font)
-                tw, th = box[2] - box[0], box[3] - box[1]
-                draw.text(
-                    (x0 + S(CELL_SIZE) / 2 - tw / 2, y0 + S(CELL_SIZE) / 2 - th / 2 - box[1]),
-                    word, font=font, fill=COLOR_TEXT,
-                )
-            else:
-                draw.text((x0 + S(6), y0 + S(4)), str(n), font=number_font, fill=COLOR_MUTED)
+            draw.text((x0 + S(6), y0 + S(4)), str(n), font=number_font, fill=COLOR_MUTED)
 
     # Ladders and snakes, drawn over the grid.
     for start, end in board.ladders.items():
         _draw_ladder(draw, tuple(S(v) for v in _square_center(start)), tuple(S(v) for v in _square_center(end)))
     for start, end in board.snakes.items():
         _draw_snake(draw, tuple(S(v) for v in _square_center(start)), tuple(S(v) for v in _square_center(end)))
+
+    # Redraw word squares on top - a ladder/snake between two other squares
+    # can pass straight through one along the way, and would otherwise
+    # obscure its word.
+    for n in board.word_squares:
+        draw_word_square(n)
 
     # Outer board border, drawn last so it sits crisply on top.
     draw.rectangle(
