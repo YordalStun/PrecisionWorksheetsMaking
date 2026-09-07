@@ -114,10 +114,15 @@ sandbox, so this step needs to be run once **on your own Windows PC**:
 
 1. Open the app.
 2. Enter the child's first name, the 5 words, and tick PDF and/or Word.
-3. Pick a tab - **Probe Sheets**, **Matching Pairs Game**, **Snakes &
-   Ladders**, **Bingo**, **Word Search**, **Word Trail**, or **Large Print
-   Words** - adjust that activity's options if you want, and click its
-   Generate button.
+3. Either:
+   - Click **Generate ALL sheets** (just below the name/words section) to
+     create all seven activities in one go, all on A4 paper, using each
+     tab's current settings (e.g. number of probe sheets or bingo cards) -
+     or
+   - Pick a tab - **Probe Sheets**, **Matching Pairs Game**, **Snakes &
+     Ladders**, **Bingo**, **Word Search**, **Word Trail**, or **Large
+     Print Words** - adjust that activity's options if you want, and click
+     its own Generate button.
 4. Choose (or accept the default) output folder - it defaults to
    `Documents\PrecisionWorksheets`.
 5. The file(s) appear in that folder, ready to print. You can switch tabs

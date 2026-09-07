@@ -54,9 +54,10 @@ class PrecisionWorksheetApp:
         outer.grid(row=0, column=0, sticky="nsew")
 
         self._build_child_section(outer, row=0)
-        self._build_activity_tabs(outer, row=1)
-        self._build_output_section(outer, row=2)
-        self._build_status_section(outer, row=3)
+        self._build_generate_all_section(outer, row=1)
+        self._build_activity_tabs(outer, row=2)
+        self._build_output_section(outer, row=3)
+        self._build_status_section(outer, row=4)
 
     # ------------------------------------------------------------------
     # Layout
@@ -93,6 +94,22 @@ class PrecisionWorksheetApp:
         ttk.Checkbutton(formats, text="Word document (.docx)", variable=self.make_docx_var).grid(
             row=0, column=2, sticky="w"
         )
+
+    def _build_generate_all_section(self, parent: ttk.Frame, row: int) -> None:
+        frame = ttk.LabelFrame(parent, text="Generate everything at once", padding=12)
+        frame.grid(row=row, column=0, sticky="ew", pady=(0, 10))
+
+        ttk.Label(
+            frame, text="One click: all 7 sheets, all on A4 paper, saved to the folder below\n"
+            "(using each tab's current settings, e.g. number of probe sheets or bingo cards).",
+            justify="left",
+        ).grid(row=0, column=0, sticky="w")
+
+        style = ttk.Style()
+        style.configure("GenerateAll.TButton", font=("TkDefaultFont", 11, "bold"))
+        ttk.Button(
+            frame, text="Generate ALL sheets", style="GenerateAll.TButton", command=self._on_generate_all,
+        ).grid(row=1, column=0, sticky="w", pady=(10, 0))
 
     def _build_activity_tabs(self, parent: ttk.Frame, row: int) -> None:
         notebook = ttk.Notebook(parent)
@@ -287,28 +304,140 @@ class PrecisionWorksheetApp:
             _open_folder(output_dir)
 
     # ------------------------------------------------------------------
+    # Generate everything at once
+    # ------------------------------------------------------------------
+    def _on_generate_all(self) -> None:
+        self.status_var.set("")
+        try:
+            child_name, words, date_str = self._collect_child_and_words()
+            make_pdf, make_docx, output_dir = self._collect_output_options()
+            num_sheets, rows, cols, font_size = self._read_probe_sheet_options()
+            num_bingo_cards = self._read_bingo_options()
+        except ValueError as exc:
+            messagebox.showerror("Check your details", str(exc))
+            return
+
+        if not self._ensure_output_dir(output_dir):
+            return
+
+        written: list[str] = []
+        errors: list[str] = []
+
+        def run(activity_name: str, build_fn, base_name: str, pdf_export_fn, docx_export_fn) -> None:
+            try:
+                result = build_fn()
+            except ValueError as exc:
+                errors.append(f"{activity_name}: {exc}")
+                return
+            try:
+                written.extend(self._write_outputs(
+                    output_dir, _safe_filename(base_name), make_pdf, make_docx,
+                    pdf_fn=lambda path: pdf_export_fn(result, path),
+                    docx_fn=lambda path: docx_export_fn(result, path),
+                ))
+            except OSError as exc:
+                errors.append(f"{activity_name}: {exc}")
+
+        run(
+            "Probe Sheets",
+            lambda: build_probe_sheets(
+                child_name=child_name, words=words, num_sheets=num_sheets, rows=rows, cols=cols, date_str=date_str,
+            ),
+            f"{child_name}_probe_sheets",
+            lambda sheets, path: export_pdf(
+                sheets, path, include_word_list=self.show_word_list_var.get(), grid_font_size=font_size,
+            ),
+            lambda sheets, path: export_docx(
+                sheets, path, include_word_list=self.show_word_list_var.get(), grid_font_size=font_size,
+            ),
+        )
+        run(
+            "Matching Pairs Game",
+            lambda: build_pairs_card_sheet(child_name, words, date_str),
+            f"{child_name}_word_pairs_game",
+            export_pairs_cards_pdf, export_pairs_cards_docx,
+        )
+        run(
+            "Snakes & Ladders",
+            lambda: build_board(child_name, words),
+            f"{child_name}_snakes_and_ladders",
+            export_board_pdf, export_board_docx,
+        )
+        run(
+            "Bingo",
+            lambda: build_bingo_cards(child_name, words, date_str, num_cards=num_bingo_cards),
+            f"{child_name}_bingo",
+            export_bingo_pdf, export_bingo_docx,
+        )
+        run(
+            "Word Search",
+            lambda: build_word_search(child_name, words),
+            f"{child_name}_word_search",
+            export_word_search_pdf, export_word_search_docx,
+        )
+        run(
+            "Word Trail",
+            lambda: build_word_trail(child_name, words),
+            f"{child_name}_word_trail",
+            lambda trail, path: export_word_trail_pdf(trail, path, page_size="A4"),
+            lambda trail, path: export_word_trail_docx(trail, path, page_size="A4"),
+        )
+        run(
+            "Large Print Words",
+            lambda: build_large_print_pages(words),
+            f"{child_name}_large_print_words",
+            export_large_print_pdf, export_large_print_docx,
+        )
+
+        if errors:
+            messagebox.showerror(
+                "Some sheets couldn't be created",
+                f"Created {len(written)} file(s), but ran into trouble with:\n\n" + "\n".join(errors),
+            )
+
+        if written:
+            self._finish(written, output_dir)
+        else:
+            self.status_var.set("Nothing was created.")
+
+    # ------------------------------------------------------------------
     # Probe sheets
     # ------------------------------------------------------------------
+    def _read_probe_sheet_options(self) -> tuple[int, int, int, int]:
+        """Returns (num_sheets, rows, cols, font_size), validated."""
+        try:
+            num_sheets = int(self.sheets_var.get())
+            rows = int(self.rows_var.get())
+            cols = int(self.cols_var.get())
+            font_size = int(self.font_size_var.get())
+        except (tk.TclError, ValueError):
+            raise ValueError("Sheets, rows, columns and max word size must be whole numbers.")
+        if not (1 <= num_sheets <= 50):
+            raise ValueError("Number of sheets must be between 1 and 50.")
+        if not (3 <= rows <= 25):
+            raise ValueError("Grid rows must be between 3 and 25.")
+        if not (3 <= cols <= 15):
+            raise ValueError("Grid columns must be between 3 and 15.")
+        if not (12 <= font_size <= 96):
+            raise ValueError("Max word size must be between 12 and 96.")
+        return num_sheets, rows, cols, font_size
+
+    def _read_bingo_options(self) -> int:
+        """Returns num_cards, validated."""
+        try:
+            num_cards = int(self.bingo_cards_var.get())
+        except (tk.TclError, ValueError):
+            raise ValueError("Number of cards must be a whole number.")
+        if not (1 <= num_cards <= 30):
+            raise ValueError("Number of cards must be between 1 and 30.")
+        return num_cards
+
     def _on_generate_probe_sheets(self) -> None:
         self.status_var.set("")
         try:
             child_name, words, date_str = self._collect_child_and_words()
             make_pdf, make_docx, output_dir = self._collect_output_options()
-            try:
-                num_sheets = int(self.sheets_var.get())
-                rows = int(self.rows_var.get())
-                cols = int(self.cols_var.get())
-                font_size = int(self.font_size_var.get())
-            except (tk.TclError, ValueError):
-                raise ValueError("Sheets, rows, columns and max word size must be whole numbers.")
-            if not (1 <= num_sheets <= 50):
-                raise ValueError("Number of sheets must be between 1 and 50.")
-            if not (3 <= rows <= 25):
-                raise ValueError("Grid rows must be between 3 and 25.")
-            if not (3 <= cols <= 15):
-                raise ValueError("Grid columns must be between 3 and 15.")
-            if not (12 <= font_size <= 96):
-                raise ValueError("Max word size must be between 12 and 96.")
+            num_sheets, rows, cols, font_size = self._read_probe_sheet_options()
         except ValueError as exc:
             messagebox.showerror("Check your details", str(exc))
             return
@@ -418,12 +547,7 @@ class PrecisionWorksheetApp:
         try:
             child_name, words, date_str = self._collect_child_and_words()
             make_pdf, make_docx, output_dir = self._collect_output_options()
-            try:
-                num_cards = int(self.bingo_cards_var.get())
-            except (tk.TclError, ValueError):
-                raise ValueError("Number of cards must be a whole number.")
-            if not (1 <= num_cards <= 30):
-                raise ValueError("Number of cards must be between 1 and 30.")
+            num_cards = self._read_bingo_options()
         except ValueError as exc:
             messagebox.showerror("Check your details", str(exc))
             return
