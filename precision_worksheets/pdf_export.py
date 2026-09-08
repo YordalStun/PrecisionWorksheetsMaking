@@ -35,6 +35,9 @@ _FOOTER_HEIGHT = 32
 _GRID_LEADING_FACTOR = 1.15
 _MIN_ROW_PADDING = 10
 
+# Progress tracker page, appended once at the end of the sheet set.
+TRACKER_TRIES = 10
+
 
 def export_pdf(
     sheets: list[ProbeSheet],
@@ -105,6 +108,37 @@ def export_pdf(
         fontName=comic_regular,
         fontSize=9,
         leading=11,
+        alignment=TA_CENTER,
+    )
+    tracker_title_style = ParagraphStyle(
+        "PTTrackerTitle",
+        parent=styles["Title"],
+        fontName=comic_bold,
+        fontSize=16,
+        alignment=TA_CENTER,
+        spaceAfter=4,
+    )
+    tracker_intro_style = ParagraphStyle(
+        "PTTrackerIntro",
+        parent=styles["Normal"],
+        fontName=comic_regular,
+        fontSize=10.5,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#333333"),
+        spaceAfter=14,
+    )
+    tracker_header_style = ParagraphStyle(
+        "PTTrackerHeader",
+        parent=styles["Normal"],
+        fontName=comic_bold,
+        fontSize=10.5,
+        alignment=TA_CENTER,
+    )
+    tracker_cell_style = ParagraphStyle(
+        "PTTrackerCell",
+        parent=styles["Normal"],
+        fontName=comic_regular,
+        fontSize=10.5,
         alignment=TA_CENTER,
     )
 
@@ -185,7 +219,44 @@ def export_pdf(
             )
         )
 
-        if sheet.sheet_number != sheet.total_sheets:
-            story.append(PageBreak())
+        story.append(PageBreak())
+
+    # A one-off progress tracker page at the end, so the same 10-column
+    # rows can log tries across multiple days without any date being
+    # guessed or pre-filled - the child/family writes each one in by hand.
+    story.append(Paragraph("Progress Tracker", tracker_title_style))
+    story.append(
+        Paragraph(
+            "Log up to 10 tries at this probe sheet across as many days as you like.",
+            tracker_intro_style,
+        )
+    )
+
+    tracker_headers = ["Try", "Date", "Time (sec)", "Correct", "Errors", "Correct/min"]
+    tracker_data = [[Paragraph(h, tracker_header_style) for h in tracker_headers]]
+    for i in range(1, TRACKER_TRIES + 1):
+        tracker_data.append(
+            [Paragraph(str(i), tracker_cell_style)] + [Paragraph("", tracker_cell_style) for _ in range(5)]
+        )
+
+    tracker_col_width = usable_width / len(tracker_headers)
+    tracker_table = Table(
+        tracker_data,
+        colWidths=[tracker_col_width] * len(tracker_headers),
+        rowHeights=[24] + [26] * TRACKER_TRIES,
+        repeatRows=1,
+    )
+    tracker_table.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.75, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eeeeee")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(tracker_table)
 
     doc.build(story)

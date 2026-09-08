@@ -33,6 +33,9 @@ _FOOTER_HEIGHT_PT = 50
 _GRID_LEADING_FACTOR = 1.15
 _MIN_ROW_PADDING_PT = 10
 
+# Progress tracker page, appended once at the end of the sheet set.
+TRACKER_TRIES = 10
+
 
 def export_docx(
     sheets: list[ProbeSheet],
@@ -126,7 +129,38 @@ def export_docx(
         )
         set_run_font(footer_run)
 
-        if sheet.sheet_number != sheet.total_sheets:
-            doc.add_page_break()
+        doc.add_page_break()
+
+    # A one-off progress tracker page at the end, so the same 10-row table
+    # can log tries across multiple days without any date being guessed or
+    # pre-filled - the child/family writes each one in by hand.
+    tracker_title = doc.add_heading("Progress Tracker", level=1)
+    tracker_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in tracker_title.runs:
+        set_run_font(run)
+
+    tracker_intro = doc.add_paragraph()
+    tracker_intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    tracker_intro_run = tracker_intro.add_run("Log up to 10 tries at this probe sheet across as many days as you like.")
+    tracker_intro_run.italic = True
+    set_run_font(tracker_intro_run)
+
+    tracker_headers = ["Try", "Date", "Time (sec)", "Correct", "Errors", "Correct/min"]
+    tracker_table = doc.add_table(rows=TRACKER_TRIES + 1, cols=len(tracker_headers))
+    tracker_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    tracker_table.style = "Table Grid"
+    tracker_table.autofit = False
+    set_column_widths(tracker_table, [usable_width_cm / len(tracker_headers)] * len(tracker_headers))
+    set_cell_margins(tracker_table, top_pt=6, bottom_pt=6, left_pt=6, right_pt=6)
+
+    header_cells = tracker_table.rows[0].cells
+    for c, header in enumerate(tracker_headers):
+        set_cell_text(header_cells[c], header, size_pt=11, bold=True)
+
+    for r in range(1, TRACKER_TRIES + 1):
+        row_cells = tracker_table.rows[r].cells
+        set_cell_text(row_cells[0], str(r), size_pt=11, bold=False)
+        for c in range(1, len(tracker_headers)):
+            set_cell_text(row_cells[c], "", size_pt=11, bold=False)
 
     doc.save(output_path)

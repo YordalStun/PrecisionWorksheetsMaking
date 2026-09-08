@@ -35,8 +35,10 @@ class TestExports(unittest.TestCase):
         path = os.path.join(self.tmpdir.name, "out.docx")
         export_docx(self.sheets, path)
         doc = Document(path)
-        self.assertEqual(len(doc.tables), 3)
-        for table in doc.tables:
+        # One grid table per sheet, plus one progress-tracker table appended
+        # at the end of the document.
+        self.assertEqual(len(doc.tables), 4)
+        for table in doc.tables[:3]:
             self.assertEqual(len(table.rows), 10)
             self.assertEqual(len(table.columns), 9)  # 8 words + row-number column
 
@@ -51,6 +53,32 @@ class TestExports(unittest.TestCase):
         path = os.path.join(self.tmpdir.name, "out.docx")
         with self.assertRaises(ValueError):
             export_docx([], path)
+
+    def test_export_pdf_has_one_extra_page_for_the_tracker(self):
+        path = os.path.join(self.tmpdir.name, "out.pdf")
+        export_pdf(self.sheets, path)
+        with open(path, "rb") as f:
+            data = f.read()
+        # 3 sheets + 1 tracker page, plus the "/Type /Pages" tree node
+        # itself also matching this substring.
+        self.assertEqual(data.count(b"/Type /Page"), len(self.sheets) + 1 + 1)
+
+    def test_export_docx_tracker_table_has_ten_blank_rows(self):
+        path = os.path.join(self.tmpdir.name, "out.docx")
+        export_docx(self.sheets, path)
+        doc = Document(path)
+        tracker = doc.tables[-1]
+        self.assertEqual(len(tracker.rows), 11)  # header + 10 tries
+        self.assertEqual(len(tracker.columns), 6)  # Try, Date, Time, Correct, Errors, Correct/min
+
+        header_texts = [cell.text for cell in tracker.rows[0].cells]
+        self.assertEqual(header_texts, ["Try", "Date", "Time (sec)", "Correct", "Errors", "Correct/min"])
+
+        for i, row in enumerate(tracker.rows[1:], start=1):
+            cells = row.cells
+            self.assertEqual(cells[0].text, str(i))
+            for cell in cells[1:]:
+                self.assertEqual(cell.text, "")
 
 
 if __name__ == "__main__":

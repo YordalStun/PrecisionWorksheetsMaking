@@ -31,6 +31,12 @@ page has:
 - A scoring line at the bottom: time taken, number correct, number of
   errors, and correct-per-minute
 
+A **Progress Tracker** page is appended once at the end of every probe
+sheet export - a 10-row table (Try, Date, Time, Correct, Errors,
+Correct/min) left entirely blank for you to fill in by hand, so the same
+sheet's results can be logged across as many days/tries as you like
+without any dates being guessed or pre-filled.
+
 ### Matching pairs game
 
 A sheet of big cut-out cards - each of the 5 words appears on exactly two
