@@ -28,14 +28,13 @@ page has:
   sheet's font shrinks just enough to fit rather than spilling over the
   lines
 - Row numbers down the left edge, so you can count how far the child got
-- A scoring line at the bottom: time taken, number correct, number of
-  errors, and correct-per-minute
-
-A **Progress Tracker** page is appended once at the end of every probe
-sheet export - a 10-row table (Try, Date, Time, Correct, Errors,
-Correct/min) left entirely blank for you to fill in by hand, so the same
-sheet's results can be logged across as many days/tries as you like
-without any dates being guessed or pre-filled.
+- (Optional, on by default) a compact **Progress Tracker** table along the
+  bottom of the sheet - three rows (Try, Date, Score) by 10 columns, one
+  per try, left entirely blank for you to fill in by hand, so the same
+  sheet's results can be logged across as many days/tries as you like
+  without any dates being guessed or pre-filled. The grid above it is
+  sized a little shorter to make room. Turn it off with the checkbox on
+  the Probe Sheets tab if you'd rather the grid used the full page.
 
 ### Matching pairs game
 

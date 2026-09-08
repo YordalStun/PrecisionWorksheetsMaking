@@ -8,6 +8,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
+    KeepTogether,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,
@@ -25,18 +26,29 @@ PAGE_WIDTH, PAGE_HEIGHT = A4
 # of the page as possible.
 MARGIN = 10 * mm
 
-# Rough space the header (title/name/word list) and footer (scoring line)
-# take up, used to work out how much vertical room is left for the grid
-# itself - padded a little over the true value so an estimation error
-# never quietly pushes a sheet onto an extra page.
+# Rough space the header (title/name/word list) takes up, used to work out
+# how much vertical room is left for the grid itself - padded a little
+# over the true value so an estimation error never quietly pushes a sheet
+# onto an extra page.
 _HEADER_HEIGHT_WITH_WORDLIST = 85
 _HEADER_HEIGHT_WITHOUT_WORDLIST = 60
-_FOOTER_HEIGHT = 32
 _GRID_LEADING_FACTOR = 1.15
 _MIN_ROW_PADDING = 10
 
-# Progress tracker page, appended once at the end of the sheet set.
+# The tracker table (when shown) gets roughly this fraction of the page's
+# usable height, at the cost of a shorter grid above it - a fixed line
+# without it just gets a little breathing room instead.
+_TRACKER_HEIGHT_FRACTION = 0.25
+_NO_TRACKER_FOOTER_HEIGHT = 10
+_TRACKER_TITLE_HEIGHT = 32
+_TRACKER_MIN_ROW_PADDING = 6
+# Slack subtracted off the grid's share of the page, so small estimation
+# errors in either block's real rendered height can never push the
+# tracker table into a split across two pages.
+_SAFETY_MARGIN = 18
+
 TRACKER_TRIES = 10
+_TRACKER_LABEL_COL_WIDTH = 42
 
 
 def export_pdf(
@@ -44,6 +56,7 @@ def export_pdf(
     output_path: str,
     include_word_list: bool = True,
     grid_font_size: int = 20,
+    include_tracker: bool = True,
 ) -> None:
     """Write `sheets` to `output_path` as a single multi-page PDF.
 
@@ -52,6 +65,11 @@ def export_pdf(
     themselves are padded to fill the space left on the page after the
     header/footer, so the grid uses as much of the sheet as it can without
     needing the text itself to be huge.
+
+    `include_tracker` adds a compact progress-tracker table to the bottom
+    of every sheet - one row to log the date and one to log the score
+    across up to 10 tries at that sheet - at the cost of a shorter grid
+    above it to make room.
     """
     if not sheets:
         raise ValueError("No sheets to export")
@@ -94,14 +112,6 @@ def export_pdf(
         textColor=colors.HexColor("#333333"),
         spaceAfter=8,
     )
-    footer_style = ParagraphStyle(
-        "PTFooter",
-        parent=styles["Normal"],
-        fontName=comic_regular,
-        fontSize=11,
-        alignment=TA_CENTER,
-        spaceBefore=10,
-    )
     row_num_style = ParagraphStyle(
         "PTRowNum",
         parent=styles["Normal"],
@@ -114,31 +124,22 @@ def export_pdf(
         "PTTrackerTitle",
         parent=styles["Title"],
         fontName=comic_bold,
-        fontSize=16,
+        fontSize=13,
         alignment=TA_CENTER,
         spaceAfter=4,
-    )
-    tracker_intro_style = ParagraphStyle(
-        "PTTrackerIntro",
-        parent=styles["Normal"],
-        fontName=comic_regular,
-        fontSize=10.5,
-        alignment=TA_CENTER,
-        textColor=colors.HexColor("#333333"),
-        spaceAfter=14,
     )
     tracker_header_style = ParagraphStyle(
         "PTTrackerHeader",
         parent=styles["Normal"],
         fontName=comic_bold,
-        fontSize=10.5,
+        fontSize=10,
         alignment=TA_CENTER,
     )
     tracker_cell_style = ParagraphStyle(
         "PTTrackerCell",
         parent=styles["Normal"],
         fontName=comic_regular,
-        fontSize=10.5,
+        fontSize=10,
         alignment=TA_CENTER,
     )
 
@@ -184,11 +185,14 @@ def export_pdf(
         col_widths = [row_num_width] + [grid_col_width] * sheet.cols
 
         # Pad each row so the grid stretches to fill the space left on the
-        # page below the header/footer, rather than leaving it mostly blank.
+        # page below the header and (if shown) the tracker, rather than
+        # leaving it mostly blank.
         header_height = (
             _HEADER_HEIGHT_WITH_WORDLIST if include_word_list else _HEADER_HEIGHT_WITHOUT_WORDLIST
         )
-        available_grid_height = (PAGE_HEIGHT - 2 * MARGIN) - header_height - _FOOTER_HEIGHT
+        usable_height = PAGE_HEIGHT - 2 * MARGIN
+        footer_height = usable_height * _TRACKER_HEIGHT_FRACTION if include_tracker else _NO_TRACKER_FOOTER_HEIGHT
+        available_grid_height = usable_height - header_height - footer_height - _SAFETY_MARGIN
         target_row_height = available_grid_height / sheet.rows
         text_block_height = fitted_font_size * _GRID_LEADING_FACTOR
         vertical_padding = max(_MIN_ROW_PADDING, (target_row_height - text_block_height) / 2)
@@ -209,54 +213,47 @@ def export_pdf(
         )
         story.append(table)
 
-        story.append(
-            Paragraph(
-                "Time (seconds): _______ &nbsp;&nbsp;&nbsp; "
-                "Correct: _______ &nbsp;&nbsp;&nbsp; "
-                "Errors: _______ &nbsp;&nbsp;&nbsp; "
-                "Correct per minute: _______",
-                footer_style,
-            )
-        )
-
-        story.append(PageBreak())
-
-    # A one-off progress tracker page at the end, so the same 10-column
-    # rows can log tries across multiple days without any date being
-    # guessed or pre-filled - the child/family writes each one in by hand.
-    story.append(Paragraph("Progress Tracker", tracker_title_style))
-    story.append(
-        Paragraph(
-            "Log up to 10 tries at this probe sheet across as many days as you like.",
-            tracker_intro_style,
-        )
-    )
-
-    tracker_headers = ["Try", "Date", "Time (sec)", "Correct", "Errors", "Correct/min"]
-    tracker_data = [[Paragraph(h, tracker_header_style) for h in tracker_headers]]
-    for i in range(1, TRACKER_TRIES + 1):
-        tracker_data.append(
-            [Paragraph(str(i), tracker_cell_style)] + [Paragraph("", tracker_cell_style) for _ in range(5)]
-        )
-
-    tracker_col_width = usable_width / len(tracker_headers)
-    tracker_table = Table(
-        tracker_data,
-        colWidths=[tracker_col_width] * len(tracker_headers),
-        rowHeights=[24] + [26] * TRACKER_TRIES,
-        repeatRows=1,
-    )
-    tracker_table.setStyle(
-        TableStyle(
-            [
-                ("GRID", (0, 0), (-1, -1), 0.75, colors.grey),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eeeeee")),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        if include_tracker:
+            tracker_flowables = [
+                Spacer(1, 8),
+                Paragraph("Progress Tracker", tracker_title_style),
             ]
-        )
-    )
-    story.append(tracker_table)
+
+            tracker_data = [
+                [Paragraph("Try", tracker_header_style)]
+                + [Paragraph(str(i), tracker_header_style) for i in range(1, TRACKER_TRIES + 1)],
+                [Paragraph("Date", tracker_header_style)]
+                + [Paragraph("", tracker_cell_style) for _ in range(TRACKER_TRIES)],
+                [Paragraph("Score", tracker_header_style)]
+                + [Paragraph("", tracker_cell_style) for _ in range(TRACKER_TRIES)],
+            ]
+            try_col_width = (usable_width - _TRACKER_LABEL_COL_WIDTH) / TRACKER_TRIES
+            tracker_col_widths = [_TRACKER_LABEL_COL_WIDTH] + [try_col_width] * TRACKER_TRIES
+
+            tracker_row_area = footer_height - _TRACKER_TITLE_HEIGHT
+            tracker_target_row_height = tracker_row_area / 3
+            tracker_text_height = 10 * _GRID_LEADING_FACTOR
+            tracker_padding = max(
+                _TRACKER_MIN_ROW_PADDING, (tracker_target_row_height - tracker_text_height) / 2
+            )
+
+            tracker_table = Table(tracker_data, colWidths=tracker_col_widths, repeatRows=0)
+            tracker_table.setStyle(
+                TableStyle(
+                    [
+                        ("GRID", (0, 0), (-1, -1), 0.75, colors.grey),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eeeeee")),
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eeeeee")),
+                        ("TOPPADDING", (0, 0), (-1, -1), tracker_padding),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), tracker_padding),
+                    ]
+                )
+            )
+            tracker_flowables.append(tracker_table)
+            story.append(KeepTogether(tracker_flowables))
+
+        if sheet.sheet_number != sheet.total_sheets:
+            story.append(PageBreak())
 
     doc.build(story)

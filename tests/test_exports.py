@@ -31,16 +31,20 @@ class TestExports(unittest.TestCase):
         with self.assertRaises(ValueError):
             export_pdf([], path)
 
-    def test_export_docx_creates_one_table_per_sheet(self):
+    def test_export_docx_creates_one_grid_and_one_tracker_table_per_sheet(self):
         path = os.path.join(self.tmpdir.name, "out.docx")
         export_docx(self.sheets, path)
         doc = Document(path)
-        # One grid table per sheet, plus one progress-tracker table appended
-        # at the end of the document.
-        self.assertEqual(len(doc.tables), 4)
-        for table in doc.tables[:3]:
+        # A grid table and a progress-tracker table for each of the 3 sheets.
+        self.assertEqual(len(doc.tables), 6)
+        grid_tables = doc.tables[0::2]
+        tracker_tables = doc.tables[1::2]
+        for table in grid_tables:
             self.assertEqual(len(table.rows), 10)
             self.assertEqual(len(table.columns), 9)  # 8 words + row-number column
+        for table in tracker_tables:
+            self.assertEqual(len(table.rows), 3)  # Try, Date, Score
+            self.assertEqual(len(table.columns), 11)  # label + 10 tries
 
     def test_export_docx_word_appears_in_grid(self):
         path = os.path.join(self.tmpdir.name, "out.docx")
@@ -54,31 +58,48 @@ class TestExports(unittest.TestCase):
         with self.assertRaises(ValueError):
             export_docx([], path)
 
-    def test_export_pdf_has_one_extra_page_for_the_tracker(self):
+    def test_export_pdf_stays_one_page_per_sheet_with_tracker_included(self):
         path = os.path.join(self.tmpdir.name, "out.pdf")
         export_pdf(self.sheets, path)
         with open(path, "rb") as f:
             data = f.read()
-        # 3 sheets + 1 tracker page, plus the "/Type /Pages" tree node
-        # itself also matching this substring.
-        self.assertEqual(data.count(b"/Type /Page"), len(self.sheets) + 1 + 1)
+        # One page per sheet (tracker lives on the same page as its grid),
+        # plus the "/Type /Pages" tree node itself also matching this
+        # substring.
+        self.assertEqual(data.count(b"/Type /Page"), len(self.sheets) + 1)
 
-    def test_export_docx_tracker_table_has_ten_blank_rows(self):
+    def test_export_pdf_without_tracker_is_still_one_page_per_sheet(self):
+        path = os.path.join(self.tmpdir.name, "out.pdf")
+        export_pdf(self.sheets, path, include_tracker=False)
+        with open(path, "rb") as f:
+            data = f.read()
+        self.assertEqual(data.count(b"/Type /Page"), len(self.sheets) + 1)
+
+    def test_export_docx_tracker_table_is_try_date_score_transposed(self):
         path = os.path.join(self.tmpdir.name, "out.docx")
         export_docx(self.sheets, path)
         doc = Document(path)
-        tracker = doc.tables[-1]
-        self.assertEqual(len(tracker.rows), 11)  # header + 10 tries
-        self.assertEqual(len(tracker.columns), 6)  # Try, Date, Time, Correct, Errors, Correct/min
+        tracker = doc.tables[1]  # grid, tracker, grid, tracker, ...
+        self.assertEqual(len(tracker.rows), 3)
+        self.assertEqual(len(tracker.columns), 11)
 
-        header_texts = [cell.text for cell in tracker.rows[0].cells]
-        self.assertEqual(header_texts, ["Try", "Date", "Time (sec)", "Correct", "Errors", "Correct/min"])
+        try_row, date_row, score_row = tracker.rows
+        self.assertEqual(try_row.cells[0].text, "Try")
+        self.assertEqual([c.text for c in try_row.cells[1:]], [str(i) for i in range(1, 11)])
+        self.assertEqual(date_row.cells[0].text, "Date")
+        self.assertEqual(score_row.cells[0].text, "Score")
+        for cell in date_row.cells[1:]:
+            self.assertEqual(cell.text, "")
+        for cell in score_row.cells[1:]:
+            self.assertEqual(cell.text, "")
 
-        for i, row in enumerate(tracker.rows[1:], start=1):
-            cells = row.cells
-            self.assertEqual(cells[0].text, str(i))
-            for cell in cells[1:]:
-                self.assertEqual(cell.text, "")
+    def test_export_docx_without_tracker_has_only_grid_tables(self):
+        path = os.path.join(self.tmpdir.name, "out.docx")
+        export_docx(self.sheets, path, include_tracker=False)
+        doc = Document(path)
+        self.assertEqual(len(doc.tables), len(self.sheets))
+        for table in doc.tables:
+            self.assertEqual(len(table.columns), 9)
 
 
 if __name__ == "__main__":

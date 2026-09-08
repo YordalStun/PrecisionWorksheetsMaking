@@ -43,6 +43,7 @@ class PrecisionWorksheetApp:
         self.cols_var = tk.IntVar(value=5)
         self.font_size_var = tk.IntVar(value=20)
         self.show_word_list_var = tk.BooleanVar(value=True)
+        self.show_tracker_var = tk.BooleanVar(value=True)
         self.bingo_cards_var = tk.IntVar(value=4)
         self.trail_page_size_var = tk.StringVar(value="A4")
         self.make_pdf_var = tk.BooleanVar(value=True)
@@ -155,8 +156,13 @@ class PrecisionWorksheetApp:
             tab, text="Show the word list at the top of each sheet", variable=self.show_word_list_var,
         ).grid(row=3, column=0, columnspan=6, sticky="w", pady=(10, 0))
 
+        ttk.Checkbutton(
+            tab, text="Include a progress tracker (Date/Score, 10 tries) at the bottom of each sheet",
+            variable=self.show_tracker_var,
+        ).grid(row=4, column=0, columnspan=6, sticky="w", pady=(4, 0))
+
         ttk.Button(tab, text="Generate probe sheets", command=self._on_generate_probe_sheets).grid(
-            row=4, column=0, columnspan=6, sticky="w", pady=(14, 0)
+            row=5, column=0, columnspan=6, sticky="w", pady=(14, 0)
         )
         return tab
 
@@ -346,9 +352,11 @@ class PrecisionWorksheetApp:
             f"{child_name}_probe_sheets",
             lambda sheets, path: export_pdf(
                 sheets, path, include_word_list=self.show_word_list_var.get(), grid_font_size=font_size,
+                include_tracker=self.show_tracker_var.get(),
             ),
             lambda sheets, path: export_docx(
                 sheets, path, include_word_list=self.show_word_list_var.get(), grid_font_size=font_size,
+                include_tracker=self.show_tracker_var.get(),
             ),
         )
         run(
@@ -460,9 +468,11 @@ class PrecisionWorksheetApp:
                 output_dir, base_name, make_pdf, make_docx,
                 pdf_fn=lambda path: export_pdf(
                     sheets, path, include_word_list=self.show_word_list_var.get(), grid_font_size=font_size,
+                    include_tracker=self.show_tracker_var.get(),
                 ),
                 docx_fn=lambda path: export_docx(
                     sheets, path, include_word_list=self.show_word_list_var.get(), grid_font_size=font_size,
+                    include_tracker=self.show_tracker_var.get(),
                 ),
             )
         except OSError as exc:
