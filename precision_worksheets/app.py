@@ -401,6 +401,7 @@ class ChildScreen(QWidget):
 
         tabs = QTabWidget()
         tabs.addTab(self._build_sheets_tab(), "This Week's Sheets")
+        tabs.addTab(self._build_games_tab(), "Games")
         tabs.addTab(self._build_history_tab(), "History")
         self._layout.addWidget(tabs, 1)
 
@@ -450,10 +451,13 @@ class ChildScreen(QWidget):
         generate_btn = QPushButton("Generate sheets (probe sheet, word trail, matching pairs)")
         generate_btn.setObjectName("AccentButton")
         generate_btn.clicked.connect(self._generate_sheets)
+        pairs_btn = QPushButton("\U0001f0cf Just the pairs sheet")
+        pairs_btn.clicked.connect(self._generate_pairs_only)
         export_btn = QPushButton("\U0001f4ca Export to Excel")
         export_btn.clicked.connect(self._export_excel)
         gen_row = QHBoxLayout()
         gen_row.addWidget(generate_btn)
+        gen_row.addWidget(pairs_btn)
         gen_row.addWidget(export_btn)
         gen_row.addStretch(1)
         layout.addLayout(gen_row)
@@ -534,6 +538,41 @@ class ChildScreen(QWidget):
         self.status_label.setText(f"Done! 6 files saved in {output_dir}")
         if ask_yes_no(self, "Sheets created", "Sheets created. Open the folder now?"):
             _open_folder(output_dir)
+
+    def _generate_pairs_only(self) -> None:
+        child = self._child()
+        output_dir = os.path.join(
+            self.output_edit.text().strip() or DEFAULT_OUTPUT_DIR, _safe_filename(child["name"])
+        )
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except OSError as exc:
+            show_error(self, "Can't use that folder", f"Couldn't create the output folder:\n{exc}")
+            return
+
+        words = list(self.current_words)
+        date_str = datetime.date.today().strftime("%d/%m/%Y")
+        base = _safe_filename(child["name"])
+
+        try:
+            pairs = build_pairs_card_sheet(child["name"], words, date_str)
+            export_pairs_cards_pdf(pairs, os.path.join(output_dir, f"{base}_matching_pairs.pdf"))
+            export_pairs_cards_docx(pairs, os.path.join(output_dir, f"{base}_matching_pairs.docx"))
+        except (ValueError, OSError) as exc:
+            show_error(self, "Couldn't generate the pairs sheet", str(exc))
+            return
+
+        self.status_label.setText(f"Done! Pairs sheet saved in {output_dir}")
+        if ask_yes_no(self, "Pairs sheet created", "Pairs sheet created. Open the folder now?"):
+            _open_folder(output_dir)
+
+    # ------------------------------------------------------------------
+    # Games tab
+    # ------------------------------------------------------------------
+    def _build_games_tab(self) -> QWidget:
+        from .games_ui import GamesTab
+
+        return GamesTab(self, self.conn, self.child_id, self.current_words)
 
     def _export_excel(self) -> None:
         from .excel_export import export_child_report

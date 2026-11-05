@@ -32,7 +32,8 @@ class TestExcelExport(unittest.TestCase):
 
         wb = load_workbook(path)
         self.assertEqual(
-            wb.sheetnames, ["Overview", "Current Word List", "Session History", "Session Word Detail"]
+            wb.sheetnames,
+            ["Overview", "Current Word List", "Session History", "Session Word Detail", "Game Scores"],
         )
 
         overview = wb["Overview"]

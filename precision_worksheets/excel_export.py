@@ -54,6 +54,7 @@ def export_child_report(conn: sqlite3.Connection, child_id: int, path: str) -> N
     sessions = db.get_sessions(conn, child_id)
     _build_history_sheet(wb.create_sheet("Session History"), sessions)
     _build_word_detail_sheet(wb.create_sheet("Session Word Detail"), conn, sessions)
+    _build_game_scores_sheet(wb.create_sheet("Game Scores"), conn, child_id)
 
     wb.save(path)
 
@@ -155,3 +156,26 @@ def _build_word_detail_sheet(ws: Worksheet, conn: sqlite3.Connection, sessions: 
         ws.cell(row=2, column=1, value="No results recorded yet.")
 
     _autofit(ws, [14, 18, 12])
+
+
+def _build_game_scores_sheet(ws: Worksheet, conn: sqlite3.Connection, child_id: int) -> None:
+    from .games_ui import GAME_LABELS
+
+    headers = ["Date", "Game", "Score"]
+    for col, text in enumerate(headers, start=1):
+        ws.cell(row=1, column=col, value=text)
+    _style_header_row(ws, 1, len(headers))
+    ws.freeze_panes = "A2"
+
+    rows = db.get_game_scores(conn, child_id)
+    if not rows:
+        ws.cell(row=2, column=1, value="No games played yet.")
+        _autofit(ws, [14, 22, 16])
+        return
+
+    for r, row in enumerate(rows, start=2):
+        ws.cell(row=r, column=1, value=row["date"])
+        ws.cell(row=r, column=2, value=GAME_LABELS.get(row["game"], row["game"]))
+        ws.cell(row=r, column=3, value=f"{row['score']:g}{row['metric'] or ''}")
+
+    _autofit(ws, [14, 22, 16])
