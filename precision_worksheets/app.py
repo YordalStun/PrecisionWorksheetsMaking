@@ -440,6 +440,7 @@ class ChildScreen(QWidget):
         output_box = QGroupBox("Save to")
         output_layout = QHBoxLayout(output_box)
         self.output_edit = QLineEdit(self.output_dir)
+        self.output_edit.textChanged.connect(self._on_output_dir_changed)
         output_layout.addWidget(self.output_edit, 1)
         browse_btn = QPushButton("Browse...")
         browse_btn.clicked.connect(self._browse_output_dir)
@@ -449,8 +450,11 @@ class ChildScreen(QWidget):
         generate_btn = QPushButton("Generate sheets (probe sheet, word trail, matching pairs)")
         generate_btn.setObjectName("AccentButton")
         generate_btn.clicked.connect(self._generate_sheets)
+        export_btn = QPushButton("\U0001f4ca Export to Excel")
+        export_btn.clicked.connect(self._export_excel)
         gen_row = QHBoxLayout()
         gen_row.addWidget(generate_btn)
+        gen_row.addWidget(export_btn)
         gen_row.addStretch(1)
         layout.addLayout(gen_row)
 
@@ -484,6 +488,9 @@ class ChildScreen(QWidget):
 
         self.current_words = self.current_words[:3] + pick_known_words(known_pool, random.Random())
         self._refresh_words_label()
+
+    def _on_output_dir_changed(self, text: str) -> None:
+        self.output_dir = text
 
     def _browse_output_dir(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, "Choose a folder", self.output_edit.text() or os.getcwd())
@@ -526,6 +533,28 @@ class ChildScreen(QWidget):
         db.set_last_sheet(self.conn, self.child_id, words, date_str)
         self.status_label.setText(f"Done! 6 files saved in {output_dir}")
         if ask_yes_no(self, "Sheets created", "Sheets created. Open the folder now?"):
+            _open_folder(output_dir)
+
+    def _export_excel(self) -> None:
+        from .excel_export import export_child_report
+
+        child = self._child()
+        output_dir = self.output_edit.text().strip() or DEFAULT_OUTPUT_DIR
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except OSError as exc:
+            show_error(self, "Can't use that folder", f"Couldn't create the output folder:\n{exc}")
+            return
+
+        path = os.path.join(output_dir, f"{_safe_filename(child['name'])}_report.xlsx")
+        try:
+            export_child_report(self.conn, self.child_id, path)
+        except (ValueError, OSError) as exc:
+            show_error(self, "Couldn't export the report", str(exc))
+            return
+
+        self.status_label.setText(f"Done! Report saved to {path}")
+        if ask_yes_no(self, "Report exported", "Excel report created. Open the folder now?"):
             _open_folder(output_dir)
 
     # ------------------------------------------------------------------
