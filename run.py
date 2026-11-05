@@ -3,7 +3,7 @@
 Run with:  python run.py
 """
 
-from precision_worksheets.gui import main
+from precision_worksheets.tracking_app import main
 
 if __name__ == "__main__":
     main()
