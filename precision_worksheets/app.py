@@ -289,6 +289,15 @@ class AddChildScreen(QWidget):
         hint.setObjectName("MutedLabel")
         layout.addWidget(hint)
 
+        search_row = QHBoxLayout()
+        search_row.addWidget(QLabel("Find:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Type a word, then press Enter to tick it as known")
+        self.search_edit.textChanged.connect(self._filter_checklist)
+        self.search_edit.returnPressed.connect(self._search_enter)
+        search_row.addWidget(self.search_edit, 1)
+        layout.addLayout(search_row)
+
         self.checklist_area = QScrollArea()
         self.checklist_area.setWidgetResizable(True)
         layout.addWidget(self.checklist_area, 1)
@@ -320,14 +329,32 @@ class AddChildScreen(QWidget):
         grid = QGridLayout(inner)
         grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(2)
+        # Column-major: each column reads top-to-bottom in list order (word 1, 2, 3...
+        # down column 1, then continuing at the top of column 2), rather than hopping
+        # CHECKLIST_COLUMNS words at a time - much faster to follow against a paper list.
+        rows = -(-len(tier.words) // CHECKLIST_COLUMNS)  # ceil division
         for i, word in enumerate(tier.words):
             box = QCheckBox(word)
             self.checklist_boxes[word] = box
-            row, col = divmod(i, CHECKLIST_COLUMNS)
+            col, row = divmod(i, rows)
             grid.addWidget(box, row, col)
         grid.setColumnStretch(CHECKLIST_COLUMNS, 1)
 
         self.checklist_area.setWidget(inner)
+        self.search_edit.blockSignals(True)
+        self.search_edit.clear()
+        self.search_edit.blockSignals(False)
+
+    def _filter_checklist(self, text: str) -> None:
+        needle = text.strip().lower()
+        for word, box in self.checklist_boxes.items():
+            box.setVisible(not needle or needle in word.lower())
+
+    def _search_enter(self) -> None:
+        visible = [box for box in self.checklist_boxes.values() if box.isVisible()]
+        if len(visible) == 1:
+            visible[0].setChecked(True)
+            self.search_edit.clear()
 
     def _submit(self) -> None:
         name = self.name_edit.text().strip()
