@@ -504,8 +504,11 @@ class ChildScreen(QWidget):
 
         shuffle_btn = QPushButton("\U0001f500 Shuffle known words")
         shuffle_btn.clicked.connect(self._shuffle_known)
+        choose_btn = QPushButton("\U0001f3af Choose words myself...")
+        choose_btn.clicked.connect(self._choose_words_manually)
         shuffle_row = QHBoxLayout()
         shuffle_row.addWidget(shuffle_btn)
+        shuffle_row.addWidget(choose_btn)
         shuffle_row.addStretch(1)
         words_layout.addLayout(shuffle_row)
         layout.addWidget(words_box)
@@ -564,6 +567,19 @@ class ChildScreen(QWidget):
 
         self.current_words = self.current_words[:3] + pick_known_words(known_pool, random.Random())
         self._refresh_words_label()
+
+    def _choose_words_manually(self) -> None:
+        tier_key = self._child()["current_tier"]
+        learning_pool = [s.word for s in db.learning_words(self.conn, self.child_id, tier_key)]
+        known_pool = db.all_known_words(self.conn, self.child_id, tier_key)
+
+        dlg = ChooseWordsDialog(
+            self, learning_pool, known_pool,
+            preselected_practice=self.current_words[:3], preselected_known=self.current_words[3:],
+        )
+        if dlg.exec() == QDialog.Accepted and dlg.chosen_words is not None:
+            self.current_words = dlg.chosen_words
+            self._refresh_words_label()
 
     def _on_output_dir_changed(self, text: str) -> None:
         self.output_dir = text
@@ -739,6 +755,99 @@ class ChildScreen(QWidget):
         scroll.setWidget(inner)
         layout.addWidget(scroll)
         return tab
+
+
+class ChooseWordsDialog(QDialog):
+    """Lets the user hand-pick this week's 5 words instead of the automatic
+    pick: 3 from the words still being learned, 2 from the words already
+    known. Falls back to fewer required picks if a pool is too small to
+    offer that many (e.g. a brand-new child with nothing known yet)."""
+
+    def __init__(
+        self, parent: QWidget, learning_pool: list[str], known_pool: list[str],
+        preselected_practice: list[str], preselected_known: list[str],
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("Choose this week's words")
+        self.setMinimumSize(620, 480)
+        self.chosen_words: list[str] | None = None
+
+        self.required_practice = min(3, len(learning_pool))
+        self.required_known = min(2, len(known_pool))
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(
+            f"Pick {self.required_practice} practice word(s) and {self.required_known} known word(s) "
+            "for this week's sheet."
+        ))
+
+        columns = QHBoxLayout()
+        self.practice_boxes = self._build_column(
+            columns, f"Practice words - pick {self.required_practice}", learning_pool, preselected_practice,
+        )
+        self.known_boxes = self._build_column(
+            columns, f"Known words - pick {self.required_known}", known_pool, preselected_known,
+        )
+        layout.addLayout(columns, 1)
+
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("MutedLabel")
+        layout.addWidget(self.count_label)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        buttons.addWidget(cancel_btn)
+        self.choose_btn = QPushButton("Use these words")
+        self.choose_btn.setObjectName("AccentButton")
+        self.choose_btn.clicked.connect(self._submit)
+        buttons.addWidget(self.choose_btn)
+        layout.addLayout(buttons)
+
+        self._update_counts()
+
+    def _build_column(
+        self, parent_layout: QHBoxLayout, title: str, words: list[str], preselected: list[str],
+    ) -> dict[str, QCheckBox]:
+        box = QGroupBox(title)
+        box_layout = QVBoxLayout(box)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        inner = QWidget()
+        inner_layout = QVBoxLayout(inner)
+        inner_layout.setSpacing(2)
+
+        checkboxes: dict[str, QCheckBox] = {}
+        for word in words:
+            cb = QCheckBox(word)
+            cb.setChecked(word in preselected)
+            cb.toggled.connect(self._update_counts)
+            inner_layout.addWidget(cb)
+            checkboxes[word] = cb
+        inner_layout.addStretch(1)
+
+        scroll.setWidget(inner)
+        box_layout.addWidget(scroll)
+        parent_layout.addWidget(box, 1)
+        return checkboxes
+
+    def _selected(self, boxes: dict[str, QCheckBox]) -> list[str]:
+        return [word for word, box in boxes.items() if box.isChecked()]
+
+    def _update_counts(self, *_args) -> None:
+        practice_n = len(self._selected(self.practice_boxes))
+        known_n = len(self._selected(self.known_boxes))
+        self.count_label.setText(
+            f"Selected: {practice_n}/{self.required_practice} practice   ·   "
+            f"{known_n}/{self.required_known} known"
+        )
+        self.choose_btn.setEnabled(practice_n == self.required_practice and known_n == self.required_known)
+
+    def _submit(self) -> None:
+        self.chosen_words = self._selected(self.practice_boxes) + self._selected(self.known_boxes)
+        self.accept()
 
 
 class RecordResultsDialog(QDialog):
