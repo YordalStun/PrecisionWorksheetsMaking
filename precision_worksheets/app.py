@@ -296,6 +296,12 @@ class AddChildScreen(QWidget):
         self.search_edit.textChanged.connect(self._filter_checklist)
         self.search_edit.returnPressed.connect(self._search_enter)
         search_row.addWidget(self.search_edit, 1)
+        print_btn = QPushButton("\U0001f5a8 Print blank checklist...")
+        print_btn.clicked.connect(self._print_checklist)
+        search_row.addWidget(print_btn)
+        scan_btn = QPushButton("\U0001f4f7 Import from scan...")
+        scan_btn.clicked.connect(self._import_scan)
+        search_row.addWidget(scan_btn)
         layout.addLayout(search_row)
 
         self.checklist_area = QScrollArea()
@@ -368,6 +374,45 @@ class AddChildScreen(QWidget):
             show_error(self, "Couldn't add child", str(exc))
             return
         self.on_done()
+
+    def _print_checklist(self) -> None:
+        from .checklist_sheet import export_checklist_pdf
+
+        tier_key = self._current_tier_key()
+        tier = TIERS_BY_KEY[tier_key]
+        default_name = f"{_safe_filename(tier.label)}_checklist.pdf"
+        path, _ = QFileDialog.getSaveFileName(self, "Save blank checklist", default_name, "PDF files (*.pdf)")
+        if not path:
+            return
+        try:
+            export_checklist_pdf(tier_key, path, child_name=self.name_edit.text().strip())
+        except OSError as exc:
+            show_error(self, "Couldn't save the checklist", str(exc))
+            return
+        if ask_yes_no(self, "Checklist saved", "Checklist saved. Open the folder now?"):
+            _open_folder(os.path.dirname(path) or os.getcwd())
+
+    def _import_scan(self) -> None:
+        from .scan_import_ui import ScanImportDialog
+
+        tier_key = self._current_tier_key()
+        dlg = ScanImportDialog(self, tier_key)
+        if dlg.exec() != QDialog.Accepted or dlg.result_known_words is None:
+            return
+
+        known = dlg.result_known_words
+        for word, box in self.checklist_boxes.items():
+            if word in known:
+                box.setChecked(True)
+
+        if known:
+            show_info(
+                self, "Scan read",
+                f"Marked {len(known)} word(s) as known from the scan. "
+                "Double-check the list below before adding the child.",
+            )
+        else:
+            show_info(self, "Scan read", "No ticked boxes were found on the scanned page(s).")
 
 
 class ChildScreen(QWidget):
