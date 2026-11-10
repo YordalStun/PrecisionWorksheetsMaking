@@ -50,6 +50,7 @@ from .data.word_lists import TIERS, TIERS_BY_KEY
 from .docx_export import export_docx
 from .games.pairs_cards import build_pairs_card_sheet, export_pairs_cards_docx, export_pairs_cards_pdf
 from .games.word_trail import build_word_trail, export_word_trail_docx, export_word_trail_pdf
+from .games.adventure_boards import build_adventure_boards, export_adventure_docx, export_adventure_pdf
 from .generator import build_probe_sheets
 from .pdf_export import export_pdf
 from .style import STYLESHEET
@@ -528,11 +529,14 @@ class ChildScreen(QWidget):
         generate_btn.clicked.connect(self._generate_sheets)
         pairs_btn = QPushButton("\U0001f0cf Just the pairs sheet")
         pairs_btn.clicked.connect(self._generate_pairs_only)
+        adventure_btn = QPushButton("\U0001f3b2 Adventure boards (4 themes)")
+        adventure_btn.clicked.connect(self._generate_adventure_boards)
         export_btn = QPushButton("\U0001f4ca Export to Excel")
         export_btn.clicked.connect(self._export_excel)
         gen_row = QHBoxLayout()
         gen_row.addWidget(generate_btn)
         gen_row.addWidget(pairs_btn)
+        gen_row.addWidget(adventure_btn)
         gen_row.addWidget(export_btn)
         gen_row.addStretch(1)
         layout.addLayout(gen_row)
@@ -652,6 +656,30 @@ class ChildScreen(QWidget):
 
         self.status_label.setText(f"Done! Pairs sheet saved in {output_dir}")
         if ask_yes_no(self, "Pairs sheet created", "Pairs sheet created. Open the folder now?"):
+            _open_folder(output_dir)
+
+    def _generate_adventure_boards(self) -> None:
+        child = self._child()
+        output_dir = os.path.join(
+            self.output_edit.text().strip() or DEFAULT_OUTPUT_DIR, _safe_filename(child["name"])
+        )
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except OSError as exc:
+            show_error(self, "Can't use that folder", f"Couldn't create the output folder:\n{exc}")
+            return
+
+        base = _safe_filename(child["name"])
+        try:
+            boards = build_adventure_boards(child["name"], list(self.current_words), theme="mix", count=4)
+            export_adventure_pdf(boards, os.path.join(output_dir, f"{base}_adventure_boards.pdf"))
+            export_adventure_docx(boards, os.path.join(output_dir, f"{base}_adventure_boards.docx"))
+        except (ValueError, OSError) as exc:
+            show_error(self, "Couldn't generate the boards", str(exc))
+            return
+
+        self.status_label.setText(f"Done! Adventure boards saved in {output_dir}")
+        if ask_yes_no(self, "Boards created", "Adventure boards created. Open the folder now?"):
             _open_folder(output_dir)
 
     # ------------------------------------------------------------------

@@ -11,6 +11,7 @@ import sys
 
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from .app import _open_folder, ask_yes_no, show_error
+from .games.adventure_boards import THEMES, build_adventure_boards, export_adventure_docx, export_adventure_pdf
 from .games.bingo import build_bingo_cards, export_bingo_docx, export_bingo_pdf
 from .games.pairs_cards import build_pairs_card_sheet, export_pairs_cards_docx, export_pairs_cards_pdf
 from .games.snakes_and_ladders import build_board, export_board_docx, export_board_pdf
@@ -126,7 +128,7 @@ class QuickSheetScreen(QWidget):
         box = QGroupBox("Generate everything at once")
         inner = QVBoxLayout(box)
         inner.addWidget(QLabel(
-            "One click: all 7 sheets, all on A4 paper, saved to the folder below\n"
+            "One click: all 8 sheets, all on A4 paper, saved to the folder below\n"
             "(using each tab's current settings, e.g. number of probe sheets or bingo cards)."
         ))
         btn = QPushButton("Generate ALL sheets")
@@ -146,6 +148,7 @@ class QuickSheetScreen(QWidget):
         tabs.addTab(self._build_bingo_tab(), "Bingo")
         tabs.addTab(self._build_word_search_tab(), "Word Search")
         tabs.addTab(self._build_word_trail_tab(), "Word Trail")
+        tabs.addTab(self._build_adventure_tab(), "Adventure Boards")
         tabs.addTab(self._build_large_print_tab(), "Large Print Words")
         layout.addWidget(tabs)
 
@@ -273,6 +276,35 @@ class QuickSheetScreen(QWidget):
         btn.clicked.connect(self._on_generate_word_trail)
         grid.addWidget(btn, 2, 0, 1, 2)
         grid.setRowStretch(3, 1)
+        return tab
+
+    def _build_adventure_tab(self) -> QWidget:
+        tab = QWidget()
+        grid = QGridLayout(tab)
+        grid.addWidget(QLabel(
+            "Colourful roll-and-read board games: a winding path of word spaces\n"
+            "from START to FINISH, with bonus and oops spaces along the way.\n"
+            "Every board comes out different - print a few and race!"
+        ), 0, 0, 1, 2)
+
+        grid.addWidget(QLabel("Theme:"), 1, 0)
+        self.adventure_theme_combo = QComboBox()
+        self.adventure_theme_combo.addItem("A mix of all the themes", "mix")
+        self.adventure_theme_combo.addItem("Surprise me (random)", "random")
+        for key, info in THEMES.items():
+            self.adventure_theme_combo.addItem(info.title, key)
+        grid.addWidget(self.adventure_theme_combo, 1, 1)
+
+        grid.addWidget(QLabel("Number of boards:"), 2, 0)
+        self.adventure_count_spin = QSpinBox()
+        self.adventure_count_spin.setRange(1, 20)
+        self.adventure_count_spin.setValue(4)
+        grid.addWidget(self.adventure_count_spin, 2, 1)
+
+        btn = QPushButton("Generate adventure boards")
+        btn.clicked.connect(self._on_generate_adventure_boards)
+        grid.addWidget(btn, 3, 0, 1, 2)
+        grid.setRowStretch(4, 1)
         return tab
 
     def _build_large_print_tab(self) -> QWidget:
@@ -440,6 +472,15 @@ class QuickSheetScreen(QWidget):
             f"{child_name}_word_trail",
             lambda trail, path: export_word_trail_pdf(trail, path, page_size="A4"),
             lambda trail, path: export_word_trail_docx(trail, path, page_size="A4"),
+        )
+        run(
+            "Adventure Boards",
+            lambda: build_adventure_boards(
+                child_name, words, theme=self.adventure_theme_combo.currentData(),
+                count=self.adventure_count_spin.value(),
+            ),
+            f"{child_name}_adventure_boards",
+            export_adventure_pdf, export_adventure_docx,
         )
         run(
             "Large Print Words",
@@ -675,6 +716,43 @@ class QuickSheetScreen(QWidget):
                 output_dir, base_name, make_pdf, make_docx,
                 pdf_fn=lambda path: export_word_trail_pdf(trail, path, page_size=page_size),
                 docx_fn=lambda path: export_word_trail_docx(trail, path, page_size=page_size),
+            )
+        except OSError as exc:
+            self._show_save_error(exc)
+            return
+
+        self._finish(written, output_dir)
+
+    # ------------------------------------------------------------------
+    # Adventure boards
+    # ------------------------------------------------------------------
+    def _on_generate_adventure_boards(self) -> None:
+        self.status_label.setText("")
+        try:
+            child_name, words, _date_str = self._collect_child_and_words()
+            make_pdf, make_docx, output_dir = self._collect_output_options()
+        except ValueError as exc:
+            show_error(self, "Check your details", str(exc))
+            return
+
+        if not self._ensure_output_dir(output_dir):
+            return
+
+        try:
+            boards = build_adventure_boards(
+                child_name, words, theme=self.adventure_theme_combo.currentData(),
+                count=self.adventure_count_spin.value(),
+            )
+        except ValueError as exc:
+            show_error(self, "Couldn't build the boards", str(exc))
+            return
+
+        base_name = _safe_filename(f"{child_name}_adventure_boards")
+        try:
+            written = self._write_outputs(
+                output_dir, base_name, make_pdf, make_docx,
+                pdf_fn=lambda path: export_adventure_pdf(boards, path),
+                docx_fn=lambda path: export_adventure_docx(boards, path),
             )
         except OSError as exc:
             self._show_save_error(exc)

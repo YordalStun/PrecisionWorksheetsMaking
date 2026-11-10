@@ -18,6 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ..fonts import get_board_font_paths
 from ..generator import generate_word_grid
 from ._drawing import export_full_page_image_docx, export_full_page_image_pdf, fit_font, wrap_text
+from ._fun import PASTEL_RAINBOW, Canvas, darker, draw_fun_title, draw_name_banner
 
 CIRCLES_PER_ROW = 6
 NUM_ROWS = 4
@@ -40,11 +41,12 @@ A3_SCALE = math.sqrt(2)
 
 COLOR_OUTLINE = (40, 40, 40)
 COLOR_FILL = (255, 255, 255)
-COLOR_START_FILL = (200, 235, 200)
+COLOR_START_FILL = (130, 215, 120)
 COLOR_FINISH_FILL = (255, 221, 130)
 COLOR_TEXT = (30, 30, 30)
 COLOR_MUTED = (90, 90, 90)
-COLOR_PATH = (60, 150, 95)
+COLOR_PATH = (150, 120, 230)
+COLOR_BACKGROUND = (250, 248, 255)
 
 # How wiggly the connecting trail line is: waves per gap, and amplitude as
 # a fraction of that gap's own visible length (not the circle diameter) -
@@ -216,8 +218,8 @@ def render_trail_image(trail: WordTrail, page_size: str = "A4") -> Image.Image:
     # offsets, legend spacing) that aren't already part of _Layout.
     scale = SUPERSAMPLE
     img_w, img_h = round(layout.img_width * scale), round(layout.img_height * scale)
-    img = Image.new("RGB", (img_w, img_h), (255, 255, 255))
-    draw = ImageDraw.Draw(img)
+    canvas = Canvas(round(layout.img_width), round(layout.img_height), background=COLOR_BACKGROUND, scale=scale)
+    img, draw = canvas.img, canvas.draw
 
     def S(v: float) -> float:
         return v * scale
@@ -233,8 +235,8 @@ def render_trail_image(trail: WordTrail, page_size: str = "A4") -> Image.Image:
         w = box[2] - box[0]
         draw.text((S(layout.img_width / 2) - w / 2, S(y)), text, font=font, fill=fill)
 
-    centered_text(50 * k, "Word Trail", title_font)
-    centered_text(120 * k, f"for {trail.child_name}", subtitle_font, fill=COLOR_MUTED)
+    draw_fun_title(canvas, "Word Trail", 95 * k, 90 * k, rng=random.Random(len(trail.trail) + sum(map(len, trail.trail))))
+    draw_name_banner(canvas, 195 * k, trail.child_name)
 
     positions = _build_path_positions(layout)
     radius = layout.circle_diameter / 2
@@ -248,10 +250,15 @@ def render_trail_image(trail: WordTrail, page_size: str = "A4") -> Image.Image:
     for i, (word, (x, y)) in enumerate(zip(trail.trail, positions)):
         is_start = i == 0
         is_finish = i == len(positions) - 1
-        fill = COLOR_START_FILL if is_start else COLOR_FINISH_FILL if is_finish else COLOR_FILL
+        fill = COLOR_START_FILL if is_start else COLOR_FINISH_FILL if is_finish else PASTEL_RAINBOW[i % len(PASTEL_RAINBOW)]
+        shadow = 6 * k
+        draw.ellipse(
+            [S(x - radius), S(y - radius + shadow), S(x + radius), S(y + radius + shadow)], fill=darker(fill, 0.75),
+        )
         draw.ellipse(
             [S(x - radius), S(y - radius), S(x + radius), S(y + radius)],
-            fill=fill, outline=COLOR_OUTLINE, width=max(2, int(S(3 * k))),
+            fill=fill, outline=darker(fill, 0.45) if not (is_start or is_finish) else COLOR_OUTLINE,
+            width=max(2, int(S(4 * k))),
         )
         font = fit_font(draw, word, bold_path, int(S(34 * k)), int(S(layout.circle_diameter - 30 * k)))
         box = draw.textbbox((0, 0), word, font=font)
