@@ -465,7 +465,15 @@ class ChildScreen(QWidget):
 
         name_label = QLabel(child["name"])
         name_label.setObjectName("HeaderLabel")
-        self._layout.addWidget(name_label)
+        play_btn = QPushButton("\U0001f3ae  Play games!")
+        play_btn.setObjectName("ArcadeButton")
+        play_btn.setToolTip("Open the Word Arcade with this week's words")
+        play_btn.clicked.connect(self._open_arcade)
+        name_row = QHBoxLayout()
+        name_row.addWidget(name_label)
+        name_row.addStretch(1)
+        name_row.addWidget(play_btn)
+        self._layout.addLayout(name_row)
 
         subtitle = f"{child['year_group'] or 'No year group set'}  ·  {tier.label}  ·  {known} / {total} known"
         subtitle_label = QLabel(subtitle)
@@ -688,7 +696,17 @@ class ChildScreen(QWidget):
     def _build_games_tab(self) -> QWidget:
         from .games_ui import GamesTab
 
-        return GamesTab(self, self.conn, self.child_id, self.current_words)
+        # A provider rather than the list itself, so the games always use
+        # the words currently shown (after a shuffle / hand-pick too).
+        self.games_tab = GamesTab(self, self.conn, self.child_id, lambda: list(self.current_words), self._child()["name"])
+        return self.games_tab
+
+    def _open_arcade(self) -> None:
+        from .games_ui import open_arcade
+
+        open_arcade(self, self.conn, self.child_id, self._child()["name"], list(self.current_words))
+        if getattr(self, "games_tab", None) is not None:
+            self.games_tab.hub.refresh()
 
     def _export_excel(self) -> None:
         from .excel_export import export_child_report
@@ -727,12 +745,15 @@ class ChildScreen(QWidget):
     # History tab
     # ------------------------------------------------------------------
     def _build_history_tab(self) -> QWidget:
+        from .games_ui import GAME_LABELS, GAME_METRICS
+
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(12, 12, 12, 12)
 
         sessions = db.get_sessions(self.conn, self.child_id)
-        if not sessions:
+        games = db.get_game_scores(self.conn, self.child_id)
+        if not sessions and not games:
             empty = QLabel("No results recorded yet.")
             empty.setObjectName("MutedLabel")
             layout.addWidget(empty)
@@ -741,13 +762,26 @@ class ChildScreen(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
         inner = QWidget()
         inner_layout = QVBoxLayout(inner)
-        inner_layout.setSpacing(8)
+        inner_layout.setSpacing(10)
 
+        def section(title: str) -> None:
+            label = QLabel(title)
+            label.setObjectName("SubHeaderLabel")
+            inner_layout.addWidget(label)
+
+        if sessions:
+            section("Weekly results")
         for session in sessions:
-            card = QGroupBox(session["date"])
+            # A plain card (not a QGroupBox, whose floating title can collide
+            # with the first line at some Windows display-scaling settings).
+            card = QFrame()
+            card.setObjectName("Card")
             card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(14, 10, 14, 10)
+            card_layout.setSpacing(4)
 
             bits = []
             if session["time_seconds"] is not None:
@@ -756,20 +790,21 @@ class ChildScreen(QWidget):
                 bits.append(f"{session['correct_count']} correct")
             if session["error_count"] is not None:
                 bits.append(f"{session['error_count']} errors")
-            if bits:
-                bits_label = QLabel("  ·  ".join(bits))
-                bits_label.setObjectName("MutedLabel")
-                card_layout.addWidget(bits_label)
+            header = QLabel(f"<b>{session['date']}</b>" + ("&nbsp;&nbsp;·&nbsp;&nbsp;" + "  ·  ".join(bits) if bits else ""))
+            header.setWordWrap(True)
+            card_layout.addWidget(header)
 
-            words_row = QHBoxLayout()
+            # All the words in one rich-text label that wraps onto as many
+            # lines as it needs, so words can never overlap each other.
+            parts = []
             for wr in db.get_session_words(self.conn, session["id"]):
-                mark = "✓" if wr["correct"] else "✗"
                 color = "#2a6b2a" if wr["correct"] else "#a03030"
-                word_label = QLabel(f"{wr['word']} {mark}")
-                word_label.setStyleSheet(f"color: {color};")
-                words_row.addWidget(word_label)
-            words_row.addStretch(1)
-            card_layout.addLayout(words_row)
+                mark = "✓" if wr["correct"] else "✗"
+                parts.append(f'<span style="color:{color}">{wr["word"]}&nbsp;{mark}</span>')
+            if parts:
+                words_label = QLabel("&nbsp;&nbsp;&nbsp; ".join(parts))
+                words_label.setWordWrap(True)
+                card_layout.addWidget(words_label)
 
             if session["notes"]:
                 notes_label = QLabel(session["notes"])
@@ -777,6 +812,25 @@ class ChildScreen(QWidget):
                 notes_label.setObjectName("MutedLabel")
                 card_layout.addWidget(notes_label)
 
+            inner_layout.addWidget(card)
+
+        if games:
+            section("Games played")
+            card = QFrame()
+            card.setObjectName("Card")
+            grid = QGridLayout(card)
+            grid.setContentsMargins(14, 10, 14, 10)
+            grid.setHorizontalSpacing(24)
+            grid.setVerticalSpacing(6)
+            for col, head in enumerate(("Date", "Game", "Score")):
+                h = QLabel(f"<b>{head}</b>")
+                grid.addWidget(h, 0, col)
+            for row, g in enumerate(games[:40], start=1):
+                grid.addWidget(QLabel(g["date"]), row, 0)
+                grid.addWidget(QLabel(GAME_LABELS.get(g["game"], g["game"])), row, 1)
+                metric = g["metric"] or GAME_METRICS.get(g["game"], "")
+                grid.addWidget(QLabel(f"{g['score']:g}{metric}"), row, 2)
+            grid.setColumnStretch(3, 1)
             inner_layout.addWidget(card)
 
         inner_layout.addStretch(1)

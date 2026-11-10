@@ -18,6 +18,7 @@ echo.
 echo Building PrecisionWorksheetMaker.exe ...
 pyinstaller --noconfirm --onefile --windowed --name "PrecisionWorksheetMaker" ^
     --add-data "precision_worksheets/assets;precision_worksheets/assets" ^
+    --hidden-import PySide6.QtMultimedia ^
     run.py
 
 echo.

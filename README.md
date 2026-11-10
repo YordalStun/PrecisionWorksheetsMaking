@@ -115,6 +115,39 @@ grid/board can offer.
 Everything is set in **Comic Sans MS** (see the Fonts section below) for
 a friendly, easy-to-read look.
 
+## Word Arcade (on-screen games)
+
+Each child's page has a big **Play games!** button (and a **Games** tab
+showing the game tiles) that opens the **Word Arcade** - a bright,
+full-window hub of game tiles using that week's words automatically. Click
+a tile to play; every game has a "Ready? 3, 2, 1, GO!" start, animated
+characters, sound effects (tiny synthesized blips - no audio files), a
+results card with 1-3 stars and a "New best score!" line, and Play again /
+Arcade buttons. Esc goes back to the hub. Scores are saved per child, shown
+on the tiles (best score + stars), in the History tab's **Games played**
+list, and in the Excel export.
+
+- **Rocket Blitz** - read the word on the rocket; a grown-up taps
+  *Read it!* (or presses →) to blast it off. 60 seconds, with streaks.
+- **Bubble Pop** - Finn the fish asks for a word; pop the bubble with
+  that word in it. 8 rounds.
+- **Whack-a-Word** *(new)* - moles pop up holding words; bonk only the
+  ones showing the target word. 45 seconds.
+- **Word Catcher** *(new)* - move the basket to catch only the apples
+  with the target word. 45 seconds.
+- **Memory Match** - flip cards to find the pairs, saying each word.
+- **Peekaboo Owl** - Hoot shows a word, then hides it behind his wings;
+  say it, then *Peek!* to check.
+- **Letter Train** - pop letter balloons in order to load the word onto
+  the train (faint letters show what goes where), say it, and wave it off.
+- **Surprise me!** picks one at random.
+
+The games are drawn with QPainter in `precision_worksheets/arcade/`
+(`engine.py` = shared game loop and effects, `games.py` = the games,
+`arcade.py` = hub and window, `sound.py` = sound effects) and scale to fill
+whatever size the window is. Scores from before the arcade redesign still
+count (the original five games kept their keys).
+
 ## Requirements
 
 - Windows 10/11
@@ -197,6 +230,7 @@ precision_worksheets/
   docx_helpers.py                  shared python-docx table helpers
   large_print.py                   large-print single-word pages -> PDF/Word
   gui.py                            the Tkinter window that ties it together
+  arcade/                          the Word Arcade on-screen games (QPainter)
   games/
     _drawing.py                     shared Pillow drawing/export helpers for image-based pages
     _fun.py                         playful drawing kit: canvas, bouncy titles, word chips, little pictures, smooth paths
