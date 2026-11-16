@@ -53,6 +53,37 @@ class TestExportPdf(unittest.TestCase):
             self.assertTrue(os.path.exists(path))
             self.assertGreater(os.path.getsize(path), 0)
 
+    def test_known_words_round_trips_through_a_scan(self):
+        """A checklist pre-filled with known_words (e.g. carrying over an
+        earlier paper assessment) should read back exactly via the real
+        OMR pipeline, same as a hand-ticked one."""
+        from PIL import Image
+
+        from precision_worksheets import omr
+        from precision_worksheets.checklist_sheet import paginate
+        from precision_worksheets.data.word_lists import FIRST_100
+
+        known = set(FIRST_100[:5]) | set(FIRST_100[50:53])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "checklist.pdf")
+            export_checklist_pdf("first100", path, known_words=known)
+
+            import fitz  # PyMuPDF
+
+            doc = fitz.open(path)
+            try:
+                detected: set[str] = set()
+                pages = paginate("first100")
+                for page, pdf_page in zip(pages, doc):
+                    pix = pdf_page.get_pixmap(matrix=fitz.Matrix(200 / 72, 200 / 72), colorspace=fitz.csGRAY)
+                    img = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+                    result = omr.read_page(img, page)
+                    detected.update(w for w, ticked in result.words.items() if ticked)
+            finally:
+                doc.close()
+
+        self.assertEqual(detected, known)
+
 
 if __name__ == "__main__":
     unittest.main()

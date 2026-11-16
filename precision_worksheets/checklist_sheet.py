@@ -88,19 +88,41 @@ def checkbox_centres(num_words: int) -> list[tuple[float, float]]:
     return positions
 
 
-def export_checklist_pdf(tier_key: str, path: str, child_name: str = "") -> None:
-    """Writes the full multi-page checklist PDF for a tier to `path`."""
+def export_checklist_pdf(
+    tier_key: str, path: str, child_name: str = "", known_words: set[str] | None = None,
+) -> None:
+    """Writes the full multi-page checklist PDF for a tier to `path`. If
+    `known_words` is given, those checkboxes are printed already ticked
+    (e.g. carrying over an earlier paper assessment onto a freshly laid
+    out sheet) - printed marks are solid and precisely placed, so they
+    scan back in cleanly regardless of how sloppy the original hand
+    ticks were."""
     pages = paginate(tier_key)
     tier = TIERS_BY_KEY[tier_key]
+    known_words = known_words or set()
 
     c = canvas.Canvas(path, pagesize=A4)
     for page in pages:
-        _draw_page(c, page, tier.label, child_name)
+        _draw_page(c, page, tier.label, child_name, known_words)
         c.showPage()
     c.save()
 
 
-def _draw_page(c: canvas.Canvas, page: ChecklistPage, tier_label: str, child_name: str) -> None:
+def _draw_check(c: canvas.Canvas, x: float, y: float) -> None:
+    """A solid tick mark centred at (x, y), sized to sit inside a checkbox
+    (short stroke down-left to the low point, long stroke up to the
+    right - y increases upward in PDF coordinates)."""
+    c.setStrokeColorRGB(0, 0, 0)
+    c.setLineWidth(2.2)
+    c.setLineCap(1)
+    r = CHECKBOX_SIZE / 2
+    c.line(x - r * 0.6, y, x - r * 0.1, y - r * 0.55)
+    c.line(x - r * 0.1, y - r * 0.55, x + r * 0.7, y + r * 0.55)
+
+
+def _draw_page(
+    c: canvas.Canvas, page: ChecklistPage, tier_label: str, child_name: str, known_words: set[str],
+) -> None:
     for x, y in marker_positions().values():
         c.setFillColorRGB(0, 0, 0)
         c.rect(x - MARKER_SIZE / 2, y - MARKER_SIZE / 2, MARKER_SIZE, MARKER_SIZE, fill=1, stroke=0)
@@ -138,6 +160,8 @@ def _draw_page(c: canvas.Canvas, page: ChecklistPage, tier_label: str, child_nam
         c.setStrokeColorRGB(0.65, 0.65, 0.65)
         c.setLineWidth(1)
         c.rect(x - CHECKBOX_SIZE / 2, y - CHECKBOX_SIZE / 2, CHECKBOX_SIZE, CHECKBOX_SIZE, fill=0, stroke=1)
+        if word in known_words:
+            _draw_check(c, x, y)
         c.setFillColorRGB(0, 0, 0)
         c.drawString(x + CHECKBOX_SIZE, y - 4, word)
 
