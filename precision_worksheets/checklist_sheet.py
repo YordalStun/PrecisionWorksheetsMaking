@@ -24,7 +24,12 @@ PAGE_WIDTH, PAGE_HEIGHT = A4
 
 MARGIN = 40.0
 COLUMNS = 2
-ROWS_PER_COLUMN = 30
+# Real hand-drawn ticks are often a big diagonal slash rather than a tidy
+# mark inside the box, and can overshoot into the row above or below -
+# rows are spaced generously (and the box itself made bigger) so that
+# overshoot a scanner picks up still lands closer to its own checkbox
+# than to a neighbour's.
+ROWS_PER_COLUMN = 20
 WORDS_PER_PAGE = COLUMNS * ROWS_PER_COLUMN
 
 HEADER_HEIGHT = 160.0
@@ -33,7 +38,7 @@ FOOTER_HEIGHT = 30.0
 MARKER_SIZE = 16.0
 MARKER_INSET = 14.0
 
-CHECKBOX_SIZE = 13.0
+CHECKBOX_SIZE = 18.0
 
 
 @dataclass(frozen=True)
@@ -130,7 +135,7 @@ def _draw_page(c: canvas.Canvas, page: ChecklistPage, tier_label: str, child_nam
     centres = checkbox_centres(len(page.words))
     c.setFont("Helvetica", 12)
     for (x, y), word in zip(centres, page.words):
-        c.setStrokeColorRGB(0.55, 0.55, 0.55)
+        c.setStrokeColorRGB(0.65, 0.65, 0.65)
         c.setLineWidth(1)
         c.rect(x - CHECKBOX_SIZE / 2, y - CHECKBOX_SIZE / 2, CHECKBOX_SIZE, CHECKBOX_SIZE, fill=0, stroke=1)
         c.setFillColorRGB(0, 0, 0)

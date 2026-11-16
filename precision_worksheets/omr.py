@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 from .checklist_sheet import (
     CHECKBOX_SIZE,
@@ -27,11 +27,18 @@ from .checklist_sheet import (
 # A scanned pixel is "ink" once it's this dark (0 = black, 255 = white).
 INK_THRESHOLD = 140
 # Fraction of dark pixels inside a checkbox's sampling region above which
-# it counts as ticked.
-TICK_FILL_RATIO = 0.18
+# it counts as ticked. Real hand-drawn ticks are thin pen/pencil strokes,
+# not a solid fill, so this is tuned low - calibrated against real scanned
+# sheets, not just solid synthetic test marks.
+TICK_FILL_RATIO = 0.07
 # How far in from each checkbox edge to sample, as a fraction of the box
-# size - keeps the printed grey border itself out of the measurement.
-SAMPLE_INSET = 0.22
+# size - keeps the printed grey border out of the measurement. Vertical
+# inset is deliberately larger than horizontal: a big diagonal tick often
+# overshoots into the row above or below, and excluding more of the box's
+# own top/bottom keeps that overshoot from being mistaken for the
+# neighbouring checkbox's own mark.
+SAMPLE_INSET_X = 0.12
+SAMPLE_INSET_Y = 0.34
 
 # A detected marker whose area differs from the expected size by more than
 # this (as a ratio) is treated as noise, not a real marker.
@@ -49,9 +56,43 @@ class PageResult:
 
 
 def load_image(path: str) -> Image.Image:
+    """Opens a scanned page from an image file. Phone photos often carry an
+    EXIF orientation tag instead of actually rotating the pixels, which
+    would otherwise make the corner markers show up sideways to this
+    code - exif_transpose bakes that rotation in first."""
     img = Image.open(path)
     img.load()
+    img = ImageOps.exif_transpose(img)
     return img.convert("L")
+
+
+def load_page_image(path: str, page_number: int = 1) -> Image.Image:
+    """Opens a scanned page from either an image file or a PDF (1-based
+    page_number, for a multi-page PDF covering more than one page)."""
+    if path.lower().endswith(".pdf"):
+        pages = load_pdf_pages(path)
+        if page_number > len(pages):
+            raise OmrError(f"That PDF only has {len(pages)} page(s), but page {page_number} was requested.")
+        return pages[page_number - 1]
+    return load_image(path)
+
+
+def load_pdf_pages(path: str, dpi: int = 200) -> list[Image.Image]:
+    """Rasterises every page of a PDF scan to a grayscale image, in order."""
+    import fitz  # PyMuPDF
+
+    images: list[Image.Image] = []
+    doc = fitz.open(path)
+    try:
+        zoom = dpi / 72.0
+        matrix = fitz.Matrix(zoom, zoom)
+        for page in doc:
+            pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csGRAY)
+            img = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+            images.append(img)
+    finally:
+        doc.close()
+    return images
 
 
 def _to_array(img: Image.Image) -> np.ndarray:
@@ -73,17 +114,12 @@ def _find_corner_marker(region: np.ndarray) -> tuple[float, float] | None:
     return float(xs.mean()), float(ys.mean())
 
 
-def _detect_markers(arr: np.ndarray) -> dict[str, tuple[float, float]] | None:
-    """Looks for the 4 corner markers, searching a window around where each
-    one is *expected* to be (from the page's known scale) rather than the
-    raw image corner, so nearby header/footer text never gets mistaken for
-    one. Returns pixel centres, or None if any marker couldn't be found."""
+def _detect_markers_at_radius(arr: np.ndarray, search_radius_pt: float) -> dict[str, tuple[float, float]] | None:
     h, w = arr.shape
     # The scanned page should be close to a full A4 at some unknown DPI -
     # use that to estimate pixels-per-point, even before markers are found.
     approx_scale_x = w / PAGE_WIDTH
     approx_scale_y = h / PAGE_HEIGHT
-    search_radius_pt = 45.0
 
     found: dict[str, tuple[float, float]] = {}
     for key, (px, py) in marker_positions().items():
@@ -101,6 +137,21 @@ def _detect_markers(arr: np.ndarray) -> dict[str, tuple[float, float]] | None:
             return None
         found[key] = (centre[0] + x0, centre[1] + y0)
     return found
+
+
+def _detect_markers(arr: np.ndarray) -> dict[str, tuple[float, float]] | None:
+    """Looks for the 4 corner markers, searching a window around where each
+    one is *expected* to be (from the page's known scale) rather than the
+    raw image corner, so nearby header/footer text never gets mistaken for
+    one. Tries a tight window first (safest against stray marks nearby),
+    then a progressively wider one, to tolerate a scanner/scanning app
+    that cropped or shifted the page more than usual. Returns pixel
+    centres, or None if no window size found all 4."""
+    for search_radius_pt in (45.0, 70.0, 100.0):
+        found = _detect_markers_at_radius(arr, search_radius_pt)
+        if found is not None:
+            return found
+    return None
 
 
 def _fit_affine(src_pts: list[tuple[float, float]], dst_pts: list[tuple[float, float]]) -> np.ndarray:
@@ -149,8 +200,8 @@ def read_page(image: Image.Image, page: ChecklistPage) -> PageResult:
     scale_y = abs(markers["bl"][1] - markers["tl"][1]) / abs(pdf_corners["tl"][1] - pdf_corners["bl"][1])
 
     centres = checkbox_centres(len(page.words))
-    half_box_x = (CHECKBOX_SIZE / 2) * scale_x * (1 - SAMPLE_INSET)
-    half_box_y = (CHECKBOX_SIZE / 2) * scale_y * (1 - SAMPLE_INSET)
+    half_box_x = (CHECKBOX_SIZE / 2) * scale_x * (1 - SAMPLE_INSET_X)
+    half_box_y = (CHECKBOX_SIZE / 2) * scale_y * (1 - SAMPLE_INSET_Y)
 
     h, w = arr.shape
     results: dict[str, bool] = {}

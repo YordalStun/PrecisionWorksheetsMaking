@@ -52,6 +52,67 @@ def render_synthetic_scan(page, known_words, rotation_deg=0.0, dpi=DPI):
     return img
 
 
+def render_sloppy_diagonal_scan(page, known_words, rng, dpi=DPI):
+    """Simulates a human drawing a big diagonal slash through each ticked
+    box's centre that overshoots well past that box's own top/bottom
+    edge into the neighbouring row - the real failure mode a live scan
+    exposed (see the "real scan under-detects / over-detects" bug)."""
+    scale = dpi / 72.0
+    w = int(PAGE_WIDTH * scale)
+    h = int(PAGE_HEIGHT * scale)
+    img = Image.new("RGB", (w, h), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    for x_pt, y_pt in marker_positions().values():
+        cx, cy = x_pt * scale, (PAGE_HEIGHT - y_pt) * scale
+        half = (MARKER_SIZE / 2) * scale
+        draw.rectangle([cx - half, cy - half, cx + half, cy + half], fill=(0, 0, 0))
+
+    centres = checkbox_centres(len(page.words))
+    for (x_pt, y_pt), word in zip(centres, page.words):
+        cx, cy = x_pt * scale, (PAGE_HEIGHT - y_pt) * scale
+        half = (CHECKBOX_SIZE / 2) * scale
+        draw.rectangle([cx - half, cy - half, cx + half, cy + half], outline=(160, 160, 160), width=2)
+        if word in known_words:
+            overshoot = half * rng.uniform(1.4, 1.9)
+            jitter = rng.uniform(-half * 0.3, half * 0.3)
+            draw.line(
+                [(cx - overshoot + jitter, cy - overshoot), (cx + overshoot + jitter, cy + overshoot)],
+                fill=(190, 20, 130), width=max(2, int(half * 0.22)),
+            )
+    return img
+
+
+class TestOmrToleratesSloppyHandwrittenTicks(unittest.TestCase):
+    """A thin, overshooting diagonal pen slash (the real way people tick
+    boxes by hand) is a very different mark from a solid synthetic blob -
+    these guard against regressing the threshold/inset tuning needed to
+    read real scans reliably."""
+
+    def test_overshooting_ticks_do_not_bleed_into_neighbours(self):
+        import random
+
+        page = paginate("first100")[0]
+        for seed in range(5):
+            rng = random.Random(seed)
+            known = {w for w in page.words if rng.random() < 0.4}
+            img = render_sloppy_diagonal_scan(page, known, rng)
+            result = omr.read_page(img, page)
+            detected = {w for w, ticked in result.words.items() if ticked}
+            self.assertEqual(detected, known, f"seed {seed}")
+
+    def test_every_word_ticked_with_overshoot(self):
+        import random
+
+        page = paginate("first100")[0]
+        rng = random.Random(42)
+        known = set(page.words)
+        img = render_sloppy_diagonal_scan(page, known, rng)
+        result = omr.read_page(img, page)
+        detected = {w for w, ticked in result.words.items() if ticked}
+        self.assertEqual(detected, known)
+
+
 class TestOmrReadsTicks(unittest.TestCase):
     def setUp(self):
         self.page = paginate("first100")[0]
@@ -115,6 +176,51 @@ class TestReadChecklist(unittest.TestCase):
         images = {1: render_synthetic_scan(pages[0], known_p1)}
         result = omr.read_checklist("first100", images)
         self.assertEqual(result, known_p1)
+
+
+class TestLoadPdfPages(unittest.TestCase):
+    def _make_pdf(self, path, n_pages=2):
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas as rl_canvas
+
+        c = rl_canvas.Canvas(path, pagesize=A4)
+        for i in range(n_pages):
+            c.drawString(100, 700, f"Page {i + 1}")
+            c.showPage()
+        c.save()
+
+    def test_rasterises_every_page_in_order(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/test.pdf"
+            self._make_pdf(path, n_pages=3)
+            images = omr.load_pdf_pages(path)
+            self.assertEqual(len(images), 3)
+            for img in images:
+                self.assertEqual(img.mode, "L")
+                self.assertGreater(img.width, 0)
+                self.assertGreater(img.height, 0)
+
+    def test_load_page_image_dispatches_pdf_by_extension(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/test.pdf"
+            self._make_pdf(path, n_pages=2)
+            img1 = omr.load_page_image(path, page_number=1)
+            img2 = omr.load_page_image(path, page_number=2)
+            self.assertEqual(img1.mode, "L")
+            self.assertEqual(img2.mode, "L")
+
+    def test_requesting_a_page_past_the_end_raises(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/test.pdf"
+            self._make_pdf(path, n_pages=1)
+            with self.assertRaises(omr.OmrError):
+                omr.load_page_image(path, page_number=2)
 
 
 if __name__ == "__main__":
