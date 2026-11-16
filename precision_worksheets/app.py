@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -431,6 +432,20 @@ class ChildScreen(QWidget):
     def _child(self):
         return db.get_child(self.conn, self.child_id)
 
+    def _edit_name(self) -> None:
+        child = self._child()
+        if child is None:
+            return
+        name, ok = QInputDialog.getText(self, "Edit name", "Child's name:", text=child["name"])
+        if not ok:
+            return
+        name = name.strip()
+        if not name:
+            show_error(self, "Check the name", "The name can't be empty.")
+            return
+        db.rename_child(self.conn, self.child_id, name, child["year_group"] or "")
+        self._build()
+
     def _clear(self) -> None:
         while self._layout.count():
             item = self._layout.takeAt(0)
@@ -462,9 +477,15 @@ class ChildScreen(QWidget):
         back_row.addStretch(1)
         self._layout.addLayout(back_row)
 
+        name_row = QHBoxLayout()
         name_label = QLabel(child["name"])
         name_label.setObjectName("HeaderLabel")
-        self._layout.addWidget(name_label)
+        name_row.addWidget(name_label)
+        edit_name_btn = QPushButton("✎ Edit name")
+        edit_name_btn.clicked.connect(self._edit_name)
+        name_row.addWidget(edit_name_btn)
+        name_row.addStretch(1)
+        self._layout.addLayout(name_row)
 
         subtitle = f"{child['year_group'] or 'No year group set'}  ·  {tier.label}  ·  {known} / {total} known"
         subtitle_label = QLabel(subtitle)
