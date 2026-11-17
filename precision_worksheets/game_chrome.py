@@ -7,7 +7,7 @@ from __future__ import annotations
 import random
 
 from PySide6.QtCore import QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter
 from PySide6.QtWidgets import QPushButton, QWidget
 
 # Per-game palette: a vertical background gradient, an accent colour for
@@ -69,6 +69,22 @@ def apply_theme(dialog, game_key: str) -> dict:
 
 def big_label_style(theme: dict, size: int = 44) -> str:
     return f"font-size: {size}pt; font-weight: 800; color: {theme['ink']};"
+
+
+def fit_label_font_pt(text: str, avail_px: int, max_pt: int = 12, min_pt: int = 7) -> int:
+    """Largest point size, at most `max_pt`, at which `text` (bold) still
+    fits on one line within `avail_px` pixels - for word tiles/cards whose
+    box is a fixed pixel size, so a long word (e.g. "accidentally") shrinks
+    to fit instead of overflowing its button."""
+    size = max_pt
+    while size > min_pt:
+        font = QFont()
+        font.setPointSize(size)
+        font.setBold(True)
+        if QFontMetrics(font).horizontalAdvance(text) <= avail_px:
+            return size
+        size -= 1
+    return min_pt
 
 
 def flash_button(btn: QPushButton, color: str) -> None:

@@ -34,7 +34,14 @@ from PySide6.QtWidgets import (
 )
 
 from . import db
-from .game_chrome import GAME_THEMES, ConfettiBurst, apply_theme, big_label_style, flash_button
+from .game_chrome import GAME_THEMES, ConfettiBurst, apply_theme, big_label_style, fit_label_font_pt, flash_button
+
+CARD_SIZE = 96
+# Fixed-size card button, minus the small padding/border the card styles
+# below set explicitly (they override the dialog-wide QPushButton padding,
+# which alone would eat 40px of a 96px-wide card) - the width a face-up
+# word actually has left to fit in.
+CARD_TEXT_AVAIL_PX = 80
 
 # (key, title, metric suffix, lower_is_better)
 GAME_DEFS = [
@@ -353,31 +360,30 @@ class MemoryMatchDialog(_GameDialogBase):
 
         self._facedown_style = (
             f"background: {self.theme['accent']}; color: white; font-size: 20pt; font-weight: 800; "
-            "border: none; border-radius: 14px;"
-        )
-        self._faceup_style = (
-            f"background: white; color: {self.theme['ink']}; font-size: 12pt; font-weight: 800; "
-            "border: 2px solid rgba(0,0,0,0.15); border-radius: 14px;"
-        )
-        self._matched_style = (
-            f"background: {CORRECT_COLOR}; color: white; font-size: 12pt; font-weight: 800; "
-            "border: none; border-radius: 14px;"
+            "border: none; border-radius: 14px; padding: 2px;"
         )
 
         self.cards: list[QPushButton] = []
         for i, word in enumerate(cards):
             btn = QPushButton("?")
-            btn.setFixedSize(96, 96)
+            btn.setFixedSize(CARD_SIZE, CARD_SIZE)
             btn.setStyleSheet(self._facedown_style)
             btn.clicked.connect(lambda _checked=False, w=word, b=btn: self._flip(w, b))
             grid.addWidget(btn, i // 5, i % 5)
             self.cards.append(btn)
 
+    def _face_style(self, word: str, bg: str, color: str, border: str) -> str:
+        font_pt = fit_label_font_pt(word, CARD_TEXT_AVAIL_PX, max_pt=12)
+        return (
+            f"background: {bg}; color: {color}; font-size: {font_pt}pt; font-weight: 800; "
+            f"border: {border}; border-radius: 14px; padding: 2px;"
+        )
+
     def _flip(self, word: str, btn: QPushButton) -> None:
         if self.lock or btn.text() != "?" or not btn.isEnabled():
             return
         btn.setText(word)
-        btn.setStyleSheet(self._faceup_style)
+        btn.setStyleSheet(self._face_style(word, "white", self.theme["ink"], "2px solid rgba(0,0,0,0.15)"))
 
         if self.first_btn is None:
             self.first_btn = btn
@@ -386,8 +392,9 @@ class MemoryMatchDialog(_GameDialogBase):
 
         self.moves += 1
         if self.first_word == word:
-            self.first_btn.setStyleSheet(self._matched_style)
-            btn.setStyleSheet(self._matched_style)
+            matched_style = self._face_style(word, CORRECT_COLOR, "white", "none")
+            self.first_btn.setStyleSheet(matched_style)
+            btn.setStyleSheet(matched_style)
             self.first_btn.setEnabled(False)
             btn.setEnabled(False)
             self.first_btn = None
