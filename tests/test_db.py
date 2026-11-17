@@ -153,5 +153,35 @@ class TestDeleteAndRename(TestDbBase):
         self.assertEqual(child["year_group"], "Year 2")
 
 
+class TestUpdateKnownWords(TestDbBase):
+    def test_retest_adds_newly_ticked_words_as_known(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:5]))
+        new_known = set(FIRST_100[:5]) | set(FIRST_100[5:8])
+        db.update_known_words(self.conn, child_id, "first100", new_known)
+        self.assertEqual(set(db.known_words(self.conn, child_id, "first100")), new_known)
+
+    def test_retest_demotes_unticked_words_back_to_learning_and_resets_streak(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:5]))
+        db.update_known_words(self.conn, child_id, "first100", set(FIRST_100[:2]))
+        states = {s.word: s for s in db.get_word_states(self.conn, child_id, "first100")}
+        for word in FIRST_100[2:5]:
+            self.assertEqual(states[word].status, STATUS_LEARNING)
+            self.assertEqual(states[word].correct_streak, 0)
+        for word in FIRST_100[:2]:
+            self.assertEqual(states[word].status, STATUS_KNOWN)
+
+    def test_retest_does_not_disturb_practice_history_of_words_left_unticked_that_were_already_learning(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set())
+        db.record_session(self.conn, child_id, "01/01/2026", [(FIRST_100[0], True)])
+        before = {s.word: s for s in db.get_word_states(self.conn, child_id, "first100")}[FIRST_100[0]]
+
+        db.update_known_words(self.conn, child_id, "first100", set())
+
+        after = {s.word: s for s in db.get_word_states(self.conn, child_id, "first100")}[FIRST_100[0]]
+        self.assertEqual(after.status, STATUS_LEARNING)
+        self.assertEqual(after.times_seen, before.times_seen)
+        self.assertEqual(after.correct_streak, before.correct_streak)
+
+
 if __name__ == "__main__":
     unittest.main()

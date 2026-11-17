@@ -420,6 +420,128 @@ class AddChildScreen(QWidget):
             show_info(self, "Scan read", "No ticked boxes were found on the scanned page(s).")
 
 
+class RetestDialog(QDialog):
+    """Re-run the known-words checklist for a child who's already on the
+    system - on paper (print, hand-tick, scan back in) or straight on the
+    PC. Whatever's ticked when you save becomes the new source of truth
+    for their current word list: a word you leave unticked that was
+    previously known goes back to learning."""
+
+    def __init__(self, parent, tier_key: str, child_name: str, currently_known: set[str]):
+        super().__init__(parent)
+        self.tier_key = tier_key
+        self.child_name = child_name
+        self.checklist_boxes: dict[str, QCheckBox] = {}
+        self.result_known_words: set[str] | None = None
+
+        tier = TIERS_BY_KEY[tier_key]
+        self.setWindowTitle(f"Retake known-words test - {tier.label}")
+        self.setMinimumSize(620, 520)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(
+            "Tick every word they know right now - you can type the test out on this screen,\n"
+            "or print it, do it on paper, and scan or photograph it back in below."
+        ))
+
+        search_row = QHBoxLayout()
+        search_row.addWidget(QLabel("Find:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Type a word, then press Enter to tick it as known")
+        self.search_edit.textChanged.connect(self._filter_checklist)
+        self.search_edit.returnPressed.connect(self._search_enter)
+        search_row.addWidget(self.search_edit, 1)
+        print_btn = QPushButton("\U0001f5a8 Print checklist (pre-filled)...")
+        print_btn.clicked.connect(self._print_checklist)
+        search_row.addWidget(print_btn)
+        scan_btn = QPushButton("\U0001f4f7 Import from scan...")
+        scan_btn.clicked.connect(self._import_scan)
+        search_row.addWidget(scan_btn)
+        layout.addLayout(search_row)
+
+        self.checklist_area = QScrollArea()
+        self.checklist_area.setWidgetResizable(True)
+        layout.addWidget(self.checklist_area, 1)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        buttons.addWidget(cancel_btn)
+        save_btn = QPushButton("Save as new known words")
+        save_btn.setObjectName("AccentButton")
+        save_btn.clicked.connect(self._submit)
+        buttons.addWidget(save_btn)
+        layout.addLayout(buttons)
+
+        self._build_checklist(currently_known)
+
+    def _build_checklist(self, currently_known: set[str]) -> None:
+        tier = TIERS_BY_KEY[self.tier_key]
+        inner = QWidget()
+        grid = QGridLayout(inner)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(2)
+        rows = -(-len(tier.words) // CHECKLIST_COLUMNS)  # ceil division
+        for i, word in enumerate(tier.words):
+            box = QCheckBox(word)
+            box.setChecked(word in currently_known)
+            self.checklist_boxes[word] = box
+            col, row = divmod(i, rows)
+            grid.addWidget(box, row, col)
+        grid.setColumnStretch(CHECKLIST_COLUMNS, 1)
+        self.checklist_area.setWidget(inner)
+
+    def _filter_checklist(self, text: str) -> None:
+        needle = text.strip().lower()
+        for word, box in self.checklist_boxes.items():
+            box.setVisible(not needle or needle in word.lower())
+
+    def _search_enter(self) -> None:
+        visible = [box for box in self.checklist_boxes.values() if box.isVisible()]
+        if len(visible) == 1:
+            visible[0].setChecked(True)
+            self.search_edit.clear()
+
+    def _print_checklist(self) -> None:
+        from .checklist_sheet import export_checklist_pdf
+
+        tier = TIERS_BY_KEY[self.tier_key]
+        default_name = f"{_safe_filename(self.child_name)}_{_safe_filename(tier.label)}_retest.pdf"
+        path, _ = QFileDialog.getSaveFileName(self, "Save checklist", default_name, "PDF files (*.pdf)")
+        if not path:
+            return
+        known = {word for word, box in self.checklist_boxes.items() if box.isChecked()}
+        try:
+            export_checklist_pdf(self.tier_key, path, child_name=self.child_name, known_words=known)
+        except OSError as exc:
+            show_error(self, "Couldn't save the checklist", str(exc))
+            return
+        if ask_yes_no(self, "Checklist saved", "Checklist saved. Open the folder now?"):
+            _open_folder(os.path.dirname(path) or os.getcwd())
+
+    def _import_scan(self) -> None:
+        from .scan_import_ui import ScanImportDialog
+
+        dlg = ScanImportDialog(self, self.tier_key)
+        if dlg.exec() != QDialog.Accepted or dlg.result_known_words is None:
+            return
+
+        known = dlg.result_known_words
+        for word, box in self.checklist_boxes.items():
+            box.setChecked(word in known)
+
+        show_info(
+            self, "Scan read",
+            f"Marked {len(known)} word(s) as known from the scan. "
+            "Double-check the list below, then click \"Save as new known words\".",
+        )
+
+    def _submit(self) -> None:
+        self.result_known_words = {word for word, box in self.checklist_boxes.items() if box.isChecked()}
+        self.accept()
+
+
 class ChildScreen(QWidget):
     def __init__(self, conn, child_id: int, on_back):
         super().__init__()
@@ -538,6 +660,16 @@ class ChildScreen(QWidget):
         words_layout.addLayout(shuffle_row)
         layout.addWidget(words_box)
 
+        retest_row = QHBoxLayout()
+        retest_btn = QPushButton("\U0001f501 Retake known-words test...")
+        retest_btn.clicked.connect(self._retake_known_words_test)
+        retest_row.addWidget(retest_btn)
+        retest_hint = QLabel("Testing them again? Update their whole known-words list here - on paper or on the PC.")
+        retest_hint.setObjectName("MutedLabel")
+        retest_row.addWidget(retest_hint)
+        retest_row.addStretch(1)
+        layout.addLayout(retest_row)
+
         output_box = QGroupBox("Save to")
         output_layout = QHBoxLayout(output_box)
         self.output_edit = QLineEdit(self.output_dir)
@@ -619,6 +751,18 @@ class ChildScreen(QWidget):
         if dlg.exec() == QDialog.Accepted and dlg.chosen_words is not None:
             self.current_words = dlg.chosen_words
             self._refresh_words_label()
+
+    def _retake_known_words_test(self) -> None:
+        child = self._child()
+        tier_key = child["current_tier"]
+        currently_known = set(db.known_words(self.conn, self.child_id, tier_key))
+
+        dlg = RetestDialog(self, tier_key, child["name"], currently_known)
+        if dlg.exec() != QDialog.Accepted or dlg.result_known_words is None:
+            return
+
+        db.update_known_words(self.conn, self.child_id, tier_key, dlg.result_known_words)
+        self._build()
 
     def _on_output_dir_changed(self, text: str) -> None:
         self.output_dir = text

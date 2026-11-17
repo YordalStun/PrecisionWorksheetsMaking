@@ -152,6 +152,29 @@ def rename_child(conn: sqlite3.Connection, child_id: int, name: str, year_group:
     conn.commit()
 
 
+def update_known_words(conn: sqlite3.Connection, child_id: int, tier_key: str, known_words: set[str]) -> None:
+    """Re-sync a child's current tier against a fresh checklist (paper
+    retake or redone on-screen) - every ticked word becomes known, and
+    any word that was known but is now unticked goes back to learning
+    (its practice progress resets, since the mastery claim was wrong).
+    A word that was already learning and stays unticked keeps whatever
+    practice history it already had."""
+    tier = TIERS_BY_KEY[tier_key]
+    for word in tier.words:
+        if word in known_words:
+            conn.execute(
+                "UPDATE word_state SET status = ?, correct_streak = 3 WHERE child_id = ? AND tier = ? AND word = ?",
+                (STATUS_KNOWN, child_id, tier_key, word),
+            )
+        else:
+            conn.execute(
+                "UPDATE word_state SET status = ?, correct_streak = 0 "
+                "WHERE child_id = ? AND tier = ? AND word = ? AND status = ?",
+                (STATUS_LEARNING, child_id, tier_key, word, STATUS_KNOWN),
+            )
+    conn.commit()
+
+
 # ----------------------------------------------------------------------
 # Word state
 # ----------------------------------------------------------------------
