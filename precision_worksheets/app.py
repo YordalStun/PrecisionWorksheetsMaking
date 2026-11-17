@@ -49,7 +49,11 @@ from PySide6.QtWidgets import (
 from . import db
 from .data.word_lists import TIERS, TIERS_BY_KEY
 from .docx_export import export_docx
+from .games.bingo import build_bingo_cards, export_bingo_docx, export_bingo_pdf
 from .games.pairs_cards import build_pairs_card_sheet, export_pairs_cards_docx, export_pairs_cards_pdf
+from .games.snakes_and_ladders import build_board as build_snakes_and_ladders_board
+from .games.snakes_and_ladders import export_board_docx, export_board_pdf
+from .games.word_search import build_word_search, export_word_search_docx, export_word_search_pdf
 from .games.word_trail import build_word_trail, export_word_trail_docx, export_word_trail_pdf
 from .generator import build_probe_sheets
 from .pdf_export import export_pdf
@@ -558,6 +562,20 @@ class ChildScreen(QWidget):
         gen_row.addStretch(1)
         layout.addLayout(gen_row)
 
+        more_games_box = QGroupBox("More printable games (using the words above)")
+        more_games_layout = QHBoxLayout(more_games_box)
+        snakes_btn = QPushButton("\U0001f40d Snakes & Ladders board")
+        snakes_btn.clicked.connect(self._generate_snakes_and_ladders)
+        more_games_layout.addWidget(snakes_btn)
+        bingo_btn = QPushButton("\U0001f3b1 Bingo cards")
+        bingo_btn.clicked.connect(self._generate_bingo)
+        more_games_layout.addWidget(bingo_btn)
+        word_search_btn = QPushButton("\U0001f50d Word search")
+        word_search_btn.clicked.connect(self._generate_word_search)
+        more_games_layout.addWidget(word_search_btn)
+        more_games_layout.addStretch(1)
+        layout.addWidget(more_games_box)
+
         layout.addWidget(_hline())
 
         record_btn = QPushButton("Record this week's results →")
@@ -673,6 +691,69 @@ class ChildScreen(QWidget):
 
         self.status_label.setText(f"Done! Pairs sheet saved in {output_dir}")
         if ask_yes_no(self, "Pairs sheet created", "Pairs sheet created. Open the folder now?"):
+            _open_folder(output_dir)
+
+    def _prep_output_dir(self, child) -> str | None:
+        output_dir = os.path.join(
+            self.output_edit.text().strip() or DEFAULT_OUTPUT_DIR, _safe_filename(child["name"])
+        )
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except OSError as exc:
+            show_error(self, "Can't use that folder", f"Couldn't create the output folder:\n{exc}")
+            return None
+        return output_dir
+
+    def _generate_snakes_and_ladders(self) -> None:
+        child = self._child()
+        output_dir = self._prep_output_dir(child)
+        if output_dir is None:
+            return
+        base = _safe_filename(child["name"])
+        try:
+            board = build_snakes_and_ladders_board(child["name"], list(self.current_words))
+            export_board_pdf(board, os.path.join(output_dir, f"{base}_snakes_and_ladders.pdf"))
+            export_board_docx(board, os.path.join(output_dir, f"{base}_snakes_and_ladders.docx"))
+        except (ValueError, OSError) as exc:
+            show_error(self, "Couldn't generate the board", str(exc))
+            return
+        self.status_label.setText(f"Done! Snakes & Ladders board saved in {output_dir}")
+        if ask_yes_no(self, "Board created", "Snakes & Ladders board created. Open the folder now?"):
+            _open_folder(output_dir)
+
+    def _generate_bingo(self) -> None:
+        child = self._child()
+        output_dir = self._prep_output_dir(child)
+        if output_dir is None:
+            return
+        base = _safe_filename(child["name"])
+        date_str = datetime.date.today().strftime("%d/%m/%Y")
+        try:
+            cards = build_bingo_cards(child["name"], list(self.current_words), date_str)
+            export_bingo_pdf(cards, os.path.join(output_dir, f"{base}_bingo.pdf"))
+            export_bingo_docx(cards, os.path.join(output_dir, f"{base}_bingo.docx"))
+        except (ValueError, OSError) as exc:
+            show_error(self, "Couldn't generate the bingo cards", str(exc))
+            return
+        self.status_label.setText(f"Done! Bingo cards saved in {output_dir}")
+        if ask_yes_no(self, "Bingo cards created", "Bingo cards created. Open the folder now?"):
+            _open_folder(output_dir)
+
+    def _generate_word_search(self) -> None:
+        child = self._child()
+        output_dir = self._prep_output_dir(child)
+        if output_dir is None:
+            return
+        base = _safe_filename(child["name"])
+        try:
+            puzzle = build_word_search(child["name"], list(self.current_words))
+            export_word_search_pdf(puzzle, os.path.join(output_dir, f"{base}_word_search.pdf"))
+            export_word_search_docx(puzzle, os.path.join(output_dir, f"{base}_word_search.docx"))
+        except (ValueError, OSError) as exc:
+            show_error(self, "Couldn't generate the word search", str(exc))
+            return
+        self.status_label.setText(f"Done! Word search saved in {output_dir}")
+        if ask_yes_no(self, "Word search created", "Word search created. Open the folder now?"):
             _open_folder(output_dir)
 
     # ------------------------------------------------------------------
