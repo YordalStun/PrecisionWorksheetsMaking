@@ -47,6 +47,9 @@ from .games import (
     draw_rocket,
     draw_train_engine,
 )
+from .pirate_island import draw_pirate_icon
+
+FEATURED = "pirate"
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,7 @@ class GameInfo:
 # Order = order on the hub. Keys and metrics of the first five match the
 # original games, so earlier saved scores still count.
 GAMES: list[GameInfo] = [
+    GameInfo("pirate", "Pirate Island", "Roll the die, read words, build huts!", " coins", False, "#0b7a75", "#3cc9b5"),
     GameInfo("flash", "Rocket Blitz", "Read fast, blast off!", "/min", False, "#5b4bd6", "#9b7cf0"),
     GameInfo("pop", "Bubble Pop", "Pop the right word", "/8", False, "#2fa8e6", "#7fd6ff"),
     GameInfo("whack", "Whack-a-Word", "Bonk the right mole", " bonks", False, "#4fae3d", "#9be07a"),
@@ -76,7 +80,9 @@ GAMES_BY_KEY = {g.key: g for g in GAMES}
 
 def draw_game_icon(p: QPainter, key: str, cx: float, cy: float, s: float, t: float) -> None:
     """The picture on each hub tile (s = rough size of the picture)."""
-    if key == "flash":
+    if key == "pirate":
+        draw_pirate_icon(p, cx, cy, s * 1.35, t)
+    elif key == "flash":
         for i in range(5):
             star(p, cx - s * 0.45 + i * s * 0.22, cy - s * 0.35 + (i % 2) * s * 0.5, 6, QColor(255, 240, 180), None, 0)
         draw_rocket(p, cx, cy + math.sin(t * 3) * 6, s * 0.75, 0.6, t=t)
@@ -151,18 +157,21 @@ class HubCanvas(QWidget):
         if self.isVisible():
             self.update()
 
-    # Layout in design space: tiles in a 4 x 2 grid (7 games + Surprise).
+    # Layout in design space: a 5 x 2 grid - the featured game takes two cells, so 8 games + Surprise fill it.
     def _tile_rects(self) -> list[tuple[str, QRectF]]:
         keys = [g.key for g in GAMES] + ["surprise"]
-        cols, rows = 4, 2
+        cols, rows = 5, 2
         top = 120 if self.compact else 205
         gap = 18
         tw = (W - 40 - gap * (cols - 1)) / cols
         th = (H - top - 20 - gap * (rows - 1)) / rows
         out = []
-        for i, k in enumerate(keys):
-            r, c = divmod(i, cols)
-            out.append((k, QRectF(20 + c * (tw + gap), top + r * (th + gap), tw, th)))
+        cell = 0
+        for k in keys:
+            span = 2 if k == FEATURED else 1
+            r, c = divmod(cell, cols)
+            out.append((k, QRectF(20 + c * (tw + gap), top + r * (th + gap), tw * span + gap * (span - 1), th)))
+            cell += span
         return out
 
     def _transform(self):
@@ -286,6 +295,13 @@ class HubCanvas(QWidget):
             text(p, f"Best {best:g}{info.metric}", 0, below_top + below_h * 0.84, 13, INK, max_w=rr.width() - 20)
         else:
             text(p, blurb, 0, below_top + below_h * 0.7, 14, INK, max_w=rr.width() - 20)
+        if key == FEATURED:
+            p.save()
+            p.translate(rr.left() + 36, rr.top() + 32)
+            p.rotate(-14 + math.sin(self.t * 3) * 5)
+            star(p, 0, 0, 36, "#ff5d5d", INK, 3, rot=-90)
+            text(p, "NEW!", 0, 2, 13, WHITE, INK, 3)
+            p.restore()
         if hover:
             circle(p, rr.right() - 30, rr.top() + 30, 22, WHITE, INK, 3)
             path = QPainterPath()
@@ -341,6 +357,7 @@ class ArcadeWindow(QDialog):
         super().__init__(parent)
         self.conn = conn
         self.child_id = child_id
+        self.child_name = child_name
         self.words = list(words)
         self.setWindowTitle("Word Arcade")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
@@ -372,6 +389,7 @@ class ArcadeWindow(QDialog):
             self.game.deleteLater()
         self.game = cls(self.words, on_finish=lambda score, lines, stars, k=key: self._record(k, score),
                         on_exit=self.show_hub)
+        self.game.player_name = self.child_name
         best = self._scores().get(key)
         self.game.previous_best = best[0] if best else None
         self.stack.addWidget(self.game)

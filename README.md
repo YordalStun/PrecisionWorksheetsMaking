@@ -127,6 +127,15 @@ Arcade buttons. Esc goes back to the hub. Scores are saved per child, shown
 on the tiles (best score + stars), in the History tab's **Games played**
 list, and in the Excel export.
 
+- **Pirate Island** *(new, 3D)* - a Monopoly-style board game for 1-4
+  players on a 3D island in the sea. Roll the tumbling die and hop your
+  pirate pawn round the island; land on a word and read it out loud (a
+  grown-up taps *Got it!*) to earn a gold coin and build a hut in your
+  colour there. Land on your own hut to grow it into a sandcastle; land on
+  someone else's and they get a coin of rent. Owning both squares of a
+  colour set pays a bonus. Corners: SET SAIL (+1 coin each lap), Treasure
+  (+2), Cannon (zoom 4) and Quicksand (back 3); treasure-map squares deal
+  surprise cards. Most coins after the last round wins (about 5 minutes).
 - **Rocket Blitz** - read the word on the rocket; a grown-up taps
   *Read it!* (or presses →) to blast it off. 60 seconds, with streaks.
 - **Bubble Pop** - Finn the fish asks for a word; pop the bubble with
@@ -144,6 +153,7 @@ list, and in the Excel export.
 
 The games are drawn with QPainter in `precision_worksheets/arcade/`
 (`engine.py` = shared game loop and effects, `games.py` = the games,
+`pirate_island.py` = the 3D board game and its small perspective camera,
 `arcade.py` = hub and window, `sound.py` = sound effects) and scale to fill
 whatever size the window is. Scores from before the arcade redesign still
 count (the original five games kept their keys).

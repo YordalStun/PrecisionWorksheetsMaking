@@ -25,6 +25,7 @@ GAME_DEFS = [
     ("scramble", "Letter Train", " oops", True),
     ("whack", "Whack-a-Word", " bonks", False),
     ("catch", "Word Catcher", " caught", False),
+    ("pirate", "Pirate Island", " coins", False),
 ]
 GAME_LABELS = {key: title for key, title, _metric, _lower in GAME_DEFS}
 GAME_METRICS = {key: metric for key, _title, metric, _lower in GAME_DEFS}

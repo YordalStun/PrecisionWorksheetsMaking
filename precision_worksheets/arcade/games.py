@@ -15,6 +15,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 
 from . import sound
+from .pirate_island import PirateIsland
 from .engine import (
     BAD,
     GOLD,
@@ -1116,5 +1117,6 @@ class WordCatcher(GameCanvas):
 
 
 GAME_CLASSES: dict[str, type[GameCanvas]] = {
-    cls.key_name: cls for cls in (RocketBlitz, BubblePop, MemoryMatch, PeekabooOwl, LetterTrain, WhackAWord, WordCatcher)
+    cls.key_name: cls
+    for cls in (PirateIsland, RocketBlitz, BubblePop, MemoryMatch, PeekabooOwl, LetterTrain, WhackAWord, WordCatcher)
 }
