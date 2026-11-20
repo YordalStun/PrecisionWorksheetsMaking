@@ -705,7 +705,7 @@ class ChildScreen(QWidget):
 
         more_games_box = QGroupBox("More printable games (using the words above)")
         more_games_layout = QHBoxLayout(more_games_box)
-        snakes_btn = QPushButton("\U0001f40d Snakes & Ladders board")
+        snakes_btn = QPushButton("\U0001f40d Snakes && Ladders board")
         snakes_btn.clicked.connect(self._generate_snakes_and_ladders)
         more_games_layout.addWidget(snakes_btn)
         bingo_btn = QPushButton("\U0001f3b1 Bingo cards")
