@@ -1,7 +1,8 @@
 reportlab>=4.0
 python-docx>=1.0
 Pillow>=10.0
-PySide6>=6.7,<6.13
+# 6.12.0 leaks a reference to None on every void Qt call under Python 3.11, crashing within seconds of drawing.
+PySide6>=6.7,<6.12
 openpyxl>=3.1
 numpy>=1.26
 PyMuPDF==1.24.14
