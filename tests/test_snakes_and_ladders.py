@@ -101,55 +101,64 @@ class TestSnakesAndLaddersExport(unittest.TestCase):
         self.assertAlmostEqual(section.page_width / Cm(1), 21.0, places=1)
         self.assertAlmostEqual(section.page_height / Cm(1), 29.7, places=1)
 
-    def test_word_squares_are_redrawn_on_top_of_ladders_and_snakes(self):
-        """A ladder/snake between two other squares can pass straight
-        through a word square along the way - it must not end up drawn
-        over that word square's fill/text, or the word becomes unreadable."""
-        from unittest import mock
+    def test_render_is_repeatable_for_the_same_board(self):
+        a = render_board_image(self.board)
+        b = render_board_image(self.board)
+        self.assertEqual(a.tobytes(), b.tobytes())
 
-        from PIL import ImageDraw
 
-        from precision_worksheets.games import snakes_and_ladders as sal
+class TestBoardMakesSense(unittest.TestCase):
+    """The placement rules that keep every random board readable."""
 
-        board = build_board("Alex", ["cat", "dog", "sun", "run", "big"], seed=1)
-        self.assertTrue(board.ladders)
-        self.assertTrue(board.snakes)
+    WORDS = ["cat", "dog", "sun", "run", "big"]
 
-        events: list[tuple[str, int]] = []
-        orig_rectangle = ImageDraw.ImageDraw.rectangle
-        orig_draw_ladder = sal._draw_ladder
-        orig_draw_snake = sal._draw_snake
+    def _features(self, board):
+        from precision_worksheets.games.snakes_and_ladders import _grid_point
 
-        def tracking_rectangle(self, xy, fill=None, **kwargs):
-            # Only count full board-cell fills, not the small legend swatch
-            # (drawn later, also in COLOR_WORD_SQUARE, but not a cell).
-            is_cell_sized = abs((xy[2] - xy[0]) - sal.CELL_SIZE * sal.SUPERSAMPLE) < 1
-            if fill == sal.COLOR_WORD_SQUARE and is_cell_sized:
-                events.append(("word_square", len(events)))
-            return orig_rectangle(self, xy, fill=fill, **kwargs)
+        return [(_grid_point(a), _grid_point(b)) for a, b in list(board.ladders.items()) + list(board.snakes.items())]
 
-        def tracking_ladder(*args, **kwargs):
-            events.append(("ladder", len(events)))
-            return orig_draw_ladder(*args, **kwargs)
+    def test_no_ladders_or_snakes_cross_each_other(self):
+        from precision_worksheets.games.snakes_and_ladders import _segments_gap
 
-        def tracking_snake(*args, **kwargs):
-            events.append(("snake", len(events)))
-            return orig_draw_snake(*args, **kwargs)
+        for seed in range(40):
+            feats = self._features(build_board("Alex", self.WORDS, seed=seed))
+            for i in range(len(feats)):
+                for j in range(i + 1, len(feats)):
+                    self.assertGreater(_segments_gap(*feats[i], *feats[j]), 0.5, f"seed={seed}")
 
-        with mock.patch.object(ImageDraw.ImageDraw, "rectangle", tracking_rectangle), \
-             mock.patch.object(sal, "_draw_ladder", tracking_ladder), \
-             mock.patch.object(sal, "_draw_snake", tracking_snake):
-            sal.render_board_image(board)
+    def test_no_ladder_or_snake_passes_over_a_word_square(self):
+        from precision_worksheets.games.snakes_and_ladders import _grid_point, _seg_dist
 
-        last_feature_index = max(i for kind, i in events if kind in ("ladder", "snake"))
-        word_square_indices = [i for kind, i in events if kind == "word_square"]
-        # Every word square is filled twice: once in the initial grid pass,
-        # then again afterwards - that final redraw must land after every
-        # ladder and snake so it's the last thing painted there.
-        self.assertEqual(len(word_square_indices), 2 * len(board.word_squares))
-        final_redraws = word_square_indices[-len(board.word_squares):]
-        self.assertTrue(all(i > last_feature_index for i in final_redraws))
+        for seed in range(40):
+            board = build_board("Alex", self.WORDS, seed=seed)
+            for n in board.word_squares:
+                for a, b in self._features(board):
+                    self.assertGreaterEqual(_seg_dist(_grid_point(n), a, b), 0.6, f"seed={seed} square={n}")
 
+    def test_ladders_and_snakes_are_short_and_mostly_upright(self):
+        from precision_worksheets.games.snakes_and_ladders import MAX_ROWS_SPANNED, _row_col
+
+        for seed in range(40):
+            board = build_board("Alex", self.WORDS, seed=seed)
+            for a, b in list(board.ladders.items()) + list(board.snakes.items()):
+                (ra, ca), (rb, cb) = _row_col(a), _row_col(b)
+                rows = abs(ra - rb)
+                self.assertTrue(1 <= rows <= MAX_ROWS_SPANNED)
+                self.assertLessEqual(abs(ca - cb), rows + 1)
+
+    def test_full_set_of_features_and_words_is_placed(self):
+        from precision_worksheets.games.snakes_and_ladders import N_LADDERS, N_SNAKES, WORD_SQUARE_REPEATS
+
+        for seed in range(40):
+            board = build_board("Alex", self.WORDS, seed=seed)
+            self.assertEqual(len(board.ladders), N_LADDERS)
+            self.assertEqual(len(board.snakes), N_SNAKES)
+            self.assertEqual(len(board.word_squares), len(self.WORDS) * WORD_SQUARE_REPEATS)
+
+    def test_boards_differ_without_a_seed(self):
+        boards = [build_board("Alex", self.WORDS) for _ in range(3)]
+        layouts = {(tuple(sorted(b.ladders.items())), tuple(sorted(b.snakes.items()))) for b in boards}
+        self.assertGreater(len(layouts), 1)
 
 if __name__ == "__main__":
     unittest.main()

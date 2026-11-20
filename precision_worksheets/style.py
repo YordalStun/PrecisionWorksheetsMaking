@@ -42,6 +42,10 @@ QLabel#MutedLabel {{
     color: {MUTED};
 }}
 
+QFrame#Card QLabel, QGroupBox QLabel {{
+    background: transparent;
+}}
+
 QFrame#Card {{
     background: {PANEL_BG};
     border: 1px solid {BORDER};
@@ -92,6 +96,18 @@ QPushButton#AccentButton:hover {{
 }}
 QPushButton#AccentButton:pressed {{
     background: #1f3f6e;
+}}
+QPushButton#ArcadeButton {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff6fa8, stop:0.5 #ff9f1c, stop:1 #ffcc33);
+    border: 2px solid #c2410c;
+    border-radius: 18px;
+    color: white;
+    font-size: 13pt;
+    font-weight: 800;
+    padding: 10px 22px;
+}}
+QPushButton#ArcadeButton:hover {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5596, stop:0.5 #ff8c00, stop:1 #ffbb00);
 }}
 QPushButton#AccentButton:disabled {{
     background: {BORDER};

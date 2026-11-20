@@ -26,6 +26,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --onefile --windowed --name "PrecisionWorksheetMaker" `
             --add-data "precision_worksheets/assets;precision_worksheets/assets" `
+            --hidden-import PySide6.QtMultimedia `
             --exclude-module PySide6.QtWebEngineWidgets `
             --exclude-module PySide6.QtWebEngineCore `
             --exclude-module PySide6.QtWebEngineQuick `
@@ -33,7 +34,6 @@ jobs:
             --exclude-module PySide6.QtQuick `
             --exclude-module PySide6.QtQuick3D `
             --exclude-module PySide6.QtNetwork `
-            --exclude-module PySide6.QtMultimedia `
             --exclude-module PySide6.QtPdf `
             --exclude-module PySide6.QtBluetooth `
             --exclude-module PySide6.QtSensors `

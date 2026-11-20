@@ -2,11 +2,11 @@
 
 A small local desktop app for creating **Precision Teaching** practice
 materials from the same 5 target words: a probe sheet for fluency
-practice, plus six printable games/sheets. Enter a child's first name and
-5 words once, and generate any of the seven as a printable **PDF** and/or
+practice, plus seven printable games/sheets. Enter a child's first name and
+5 words once, and generate any of the eight as a printable **PDF** and/or
 **Word (.docx)** file, ready to print in bulk.
 
-## The seven activities
+## The eight activities
 
 ### Probe sheets
 
@@ -45,10 +45,39 @@ match - say the word out loud as you flip it.
 
 ### Snakes & Ladders
 
-A full 100-square board with ladders to climb and snakes to slide down,
-plus a handful of squares showing one of the target words instead of a
-number - land on one and read it out loud for a bonus roll. Needs a die
-and a counter per player, which the app doesn't provide.
+A full, colourful 100-square board (pastel rainbow rows, chunky striped
+snakes with faces) with ladders to climb and snakes to slide down, plus a
+handful of word squares showing one of the target words instead of a
+number - land on one and read it out loud for a bonus roll. Every board
+is randomly different, but always follows a few rules so it makes sense
+at a glance: ladders and snakes span 1-4 rows and are mostly upright
+(never a long sideways slide), none of them cross or touch each other,
+and no snake or ladder ever passes over a word square. Needs a die and a
+counter per player, which the app doesn't provide.
+
+### Adventure Boards
+
+Colourful roll-and-read board games in four themes:
+
+- **Treasure Island** - stepping stones across a sandy island in the sea;
+  gold coins (roll again) and grabby crabs (back 2); X marks the spot.
+- **Space Race** - hop from planet to planet; rocket boosts (forward 2)
+  and black holes (back 2); finish on the Moon.
+- **Rainbow Swirl** - a spiral track winding into a golden star;
+  rainbows (roll again) and rain clouds (back 2).
+- **Froggy Pond** - lily pads across a pond; dragonflies (forward 2) and
+  splashes (back 2).
+
+Each board is a winding path of word spaces from START to FINISH with a
+few bonus/oops spaces, a "Player" name banner, the word list as coloured
+chips, and a picture-based How to play box. Every board is randomly
+different - the shape of the path (start corner, wiggles, number of
+rows/turns, number of spaces), the word order, where the special spaces
+fall and where the decorations go. Special spaces are always at least 3
+apart, so "forward 2"/"back 2" always lands on an ordinary word space.
+Pick one theme, a mix of all four, or "surprise me", and how many boards
+to print (each on its own page of one PDF/Word file). Any words work -
+long words just get a smaller font to fit their space.
 
 ### Bingo
 
@@ -68,8 +97,8 @@ word, then check it off the list underneath.
 
 ### Word Trail
 
-A winding, boustrophedon path of 27 word circles from a green **Start**
-to a gold **Finish**, connected by a hand-drawn, wiggly (rather than
+A winding, boustrophedon path of 27 rainbow-coloured word circles from a
+green **Start** to a gold **Finish**, connected by a hand-drawn, wiggly (rather than
 straight) trail - the same 5 words repeated, shuffled, and evenly
 distributed along it. Needs a die and a counter per player: take turns
 rolling and moving that many circles along the trail, reading each word
@@ -85,6 +114,39 @@ grid/board can offer.
 
 Everything is set in **Comic Sans MS** (see the Fonts section below) for
 a friendly, easy-to-read look.
+
+## Word Arcade (on-screen games)
+
+Each child's page has a big **Play games!** button (and a **Games** tab
+showing the game tiles) that opens the **Word Arcade** - a bright,
+full-window hub of game tiles using that week's words automatically. Click
+a tile to play; every game has a "Ready? 3, 2, 1, GO!" start, animated
+characters, sound effects (tiny synthesized blips - no audio files), a
+results card with 1-3 stars and a "New best score!" line, and Play again /
+Arcade buttons. Esc goes back to the hub. Scores are saved per child, shown
+on the tiles (best score + stars), in the History tab's **Games played**
+list, and in the Excel export.
+
+- **Rocket Blitz** - read the word on the rocket; a grown-up taps
+  *Read it!* (or presses →) to blast it off. 60 seconds, with streaks.
+- **Bubble Pop** - Finn the fish asks for a word; pop the bubble with
+  that word in it. 8 rounds.
+- **Whack-a-Word** *(new)* - moles pop up holding words; bonk only the
+  ones showing the target word. 45 seconds.
+- **Word Catcher** *(new)* - move the basket to catch only the apples
+  with the target word. 45 seconds.
+- **Memory Match** - flip cards to find the pairs, saying each word.
+- **Peekaboo Owl** - Hoot shows a word, then hides it behind his wings;
+  say it, then *Peek!* to check.
+- **Letter Train** - pop letter balloons in order to load the word onto
+  the train (faint letters show what goes where), say it, and wave it off.
+- **Surprise me!** picks one at random.
+
+The games are drawn with QPainter in `precision_worksheets/arcade/`
+(`engine.py` = shared game loop and effects, `games.py` = the games,
+`arcade.py` = hub and window, `sound.py` = sound effects) and scale to fill
+whatever size the window is. Scores from before the arcade redesign still
+count (the original five games kept their keys).
 
 ## Requirements
 
@@ -121,12 +183,12 @@ sandbox, so this step needs to be run once **on your own Windows PC**:
 2. Enter the child's first name, the 5 words, and tick PDF and/or Word.
 3. Either:
    - Click **Generate ALL sheets** (just below the name/words section) to
-     create all seven activities in one go, all on A4 paper, using each
+     create all eight activities in one go, all on A4 paper, using each
      tab's current settings (e.g. number of probe sheets or bingo cards) -
      or
    - Pick a tab - **Probe Sheets**, **Matching Pairs Game**, **Snakes &
-     Ladders**, **Bingo**, **Word Search**, **Word Trail**, or **Large
-     Print Words** - adjust that activity's options if you want, and click
+     Ladders**, **Bingo**, **Word Search**, **Word Trail**, **Adventure
+     Boards**, or **Large Print Words** - adjust that activity's options if you want, and click
      its own Generate button.
 4. Choose (or accept the default) output folder - it defaults to
    `Documents\PrecisionWorksheets`.
@@ -168,8 +230,11 @@ precision_worksheets/
   docx_helpers.py                  shared python-docx table helpers
   large_print.py                   large-print single-word pages -> PDF/Word
   gui.py                            the Tkinter window that ties it together
+  arcade/                          the Word Arcade on-screen games (QPainter)
   games/
     _drawing.py                     shared Pillow drawing/export helpers for image-based pages
+    _fun.py                         playful drawing kit: canvas, bouncy titles, word chips, little pictures, smooth paths
+    adventure_boards.py             themed roll-and-read boards with random winding paths -> PDF/Word
     pairs_cards.py                  matching-pairs game -> PDF/Word
     snakes_and_ladders.py           board game (drawn with Pillow) -> PDF/Word
     bingo.py                         bingo cards -> PDF/Word

@@ -62,12 +62,18 @@ def export_full_page_image_pdf(
     img: Image.Image, output_path: str, title: str, margin_mm: float = 8, page_size: str = "A4"
 ) -> None:
     """Embed `img` as a single, page-filling image in a new PDF."""
+    export_full_page_images_pdf([img], output_path, title, margin_mm=margin_mm, page_size=page_size)
+
+
+def export_full_page_images_pdf(
+    imgs: list[Image.Image], output_path: str, title: str, margin_mm: float = 8, page_size: str = "A4"
+) -> None:
+    """One page per image, each scaled to fill its page."""
     from reportlab.lib.pagesizes import A3, A4
     from reportlab.lib.units import mm
-    from reportlab.platypus import Image as RLImage, SimpleDocTemplate
+    from reportlab.platypus import Image as RLImage, PageBreak, SimpleDocTemplate
 
     pagesize = {"A4": A4, "A3": A3}[page_size]
-    png_bytes = image_to_png_bytes(img)
     margin = margin_mm * mm
     doc = SimpleDocTemplate(
         output_path, pagesize=pagesize,
@@ -77,27 +83,36 @@ def export_full_page_image_pdf(
     page_width, page_height = pagesize
     usable_width = page_width - 2 * margin - FRAME_PADDING
     usable_height = page_height - 2 * margin - FRAME_PADDING
-    aspect = img.height / img.width
-    draw_width = usable_width
-    draw_height = draw_width * aspect
-    if draw_height > usable_height:
-        draw_height = usable_height
-        draw_width = draw_height / aspect
-
-    rl_image = RLImage(io.BytesIO(png_bytes), width=draw_width, height=draw_height)
-    doc.build([rl_image])
+    story = []
+    for i, img in enumerate(imgs):
+        aspect = img.height / img.width
+        draw_width = usable_width
+        draw_height = draw_width * aspect
+        if draw_height > usable_height:
+            draw_height = usable_height
+            draw_width = draw_height / aspect
+        if i:
+            story.append(PageBreak())
+        story.append(RLImage(io.BytesIO(image_to_png_bytes(img)), width=draw_width, height=draw_height))
+    doc.build(story)
 
 
 def export_full_page_image_docx(
     img: Image.Image, output_path: str, margin_cm: float = 0.8, page_size: str = "A4"
 ) -> None:
     """Embed `img` as a single, page-filling image in a new Word doc."""
+    export_full_page_images_docx([img], output_path, margin_cm=margin_cm, page_size=page_size)
+
+
+def export_full_page_images_docx(
+    imgs: list[Image.Image], output_path: str, margin_cm: float = 0.8, page_size: str = "A4"
+) -> None:
+    """One page per image, each scaled to the page width."""
     from docx import Document
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
     from docx.shared import Cm
 
     width_cm, height_cm = _DOCX_PAGE_SIZES_CM[page_size]
-    png_bytes = image_to_png_bytes(img)
     doc = Document()
     section = doc.sections[0]
     # Set explicitly rather than relying on Word's default template (which
@@ -109,8 +124,16 @@ def export_full_page_image_docx(
     section.top_margin = Cm(margin_cm)
     section.bottom_margin = Cm(margin_cm)
     usable_width_cm = (section.page_width - section.left_margin - section.right_margin) / Cm(1)
+    usable_height_cm = (section.page_height - section.top_margin - section.bottom_margin) / Cm(1)
 
-    paragraph = doc.add_paragraph()
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    paragraph.add_run().add_picture(io.BytesIO(png_bytes), width=Cm(usable_width_cm))
+    for i, img in enumerate(imgs):
+        paragraph = doc.paragraphs[0] if i == 0 and doc.paragraphs else doc.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = paragraph.add_run()
+        # Slightly under the full height, so Word never pushes the picture
+        # onto a page of its own and leaves a blank page.
+        width = min(usable_width_cm, (usable_height_cm - 0.6) * img.width / img.height)
+        run.add_picture(io.BytesIO(image_to_png_bytes(img)), width=Cm(width))
+        if i < len(imgs) - 1:
+            run.add_break(WD_BREAK.PAGE)
     doc.save(output_path)
