@@ -184,18 +184,26 @@ class TestUpdateKnownWords(TestDbBase):
 
 
 class TestWeekWords(TestDbBase):
-    def test_week_words_stay_the_same_until_results_are_recorded(self):
+    def test_known_words_stay_until_the_practice_words_change(self):
         child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:30]))
         first = db.week_words(self.conn, child_id, random.Random(1))
         for seed in range(2, 12):
             self.assertEqual(db.week_words(self.conn, child_id, random.Random(seed)), first)
+        # A week where nothing gets mastered: same practice words, so the known words stay too.
         db.record_session(self.conn, child_id, "01/01/2026", [(w, True) for w in first])
-        self.assertIsNone(db.get_child(self.conn, child_id)["week_words"])
+        self.assertEqual(db.week_words(self.conn, child_id, random.Random(99)), first)
+        # Master the practice words (3 correct in a row): new practice words, and new known ones with them.
+        for day in ("08/01/2026", "15/01/2026"):
+            db.record_session(self.conn, child_id, day, [(w, True) for w in first])
+        after = db.week_words(self.conn, child_id, random.Random(7))
+        self.assertFalse(set(after[:3]) & set(first[:3]))
 
     def test_shuffle_or_hand_pick_is_remembered(self):
         child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:30]))
         chosen = list(FIRST_100[30:33]) + list(FIRST_100[:2])
         db.set_week_words(self.conn, child_id, chosen)
+        self.assertEqual(db.week_words(self.conn, child_id), chosen)
+        db.record_session(self.conn, child_id, "01/01/2026", [(chosen[0], False)])
         self.assertEqual(db.week_words(self.conn, child_id), chosen)
 
     def test_retaking_the_test_picks_fresh_words(self):
