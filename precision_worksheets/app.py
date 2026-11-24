@@ -639,7 +639,7 @@ class ChildScreen(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(14)
 
-        self.current_words = db.choose_session_words(self.conn, self.child_id, rng=random.Random())
+        self.current_words = db.week_words(self.conn, self.child_id, rng=random.Random())
 
         words_box = QGroupBox("Next sheet will use")
         words_layout = QVBoxLayout(words_box)
@@ -746,6 +746,7 @@ class ChildScreen(QWidget):
         from .tracking import pick_known_words
 
         self.current_words = self.current_words[:3] + pick_known_words(known_pool, random.Random())
+        db.set_week_words(self.conn, self.child_id, self.current_words)
         self._refresh_words_label()
 
     def _choose_words_manually(self) -> None:
@@ -759,6 +760,7 @@ class ChildScreen(QWidget):
         )
         if dlg.exec() == QDialog.Accepted and dlg.chosen_words is not None:
             self.current_words = dlg.chosen_words
+            db.set_week_words(self.conn, self.child_id, self.current_words)
             self._refresh_words_label()
 
     def _retake_known_words_test(self) -> None:

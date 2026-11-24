@@ -85,6 +85,9 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(children)")}
+    if "week_words" not in columns:
+        conn.execute("ALTER TABLE children ADD COLUMN week_words TEXT")
     conn.commit()
     return conn
 
@@ -172,6 +175,7 @@ def update_known_words(conn: sqlite3.Connection, child_id: int, tier_key: str, k
                 "WHERE child_id = ? AND tier = ? AND word = ? AND status = ?",
                 (STATUS_LEARNING, child_id, tier_key, word, STATUS_KNOWN),
             )
+    conn.execute("UPDATE children SET week_words = NULL WHERE id = ?", (child_id,))
     conn.commit()
 
 
@@ -228,6 +232,24 @@ def choose_session_words(conn: sqlite3.Connection, child_id: int, rng: random.Ra
     practice = pick_practice_words(learning_words(conn, child_id, tier_key))
     known_pick = pick_known_words(all_known_words(conn, child_id, tier_key), rng)
     return practice + known_pick
+
+
+def week_words(conn: sqlite3.Connection, child_id: int, rng: random.Random | None = None) -> list[str]:
+    """This week's 5 words - picked once and kept until results are recorded, so reopening the
+    child (or the app) doesn't re-roll the random known words."""
+    child = get_child(conn, child_id)
+    if child is None:
+        raise ValueError(f"No such child: {child_id}")
+    if child["week_words"]:
+        return child["week_words"].split(",")
+    words = choose_session_words(conn, child_id, rng)
+    set_week_words(conn, child_id, words)
+    return words
+
+
+def set_week_words(conn: sqlite3.Connection, child_id: int, words: list[str] | None) -> None:
+    conn.execute("UPDATE children SET week_words = ? WHERE id = ?", (",".join(words) if words else None, child_id))
+    conn.commit()
 
 
 def set_last_sheet(conn: sqlite3.Connection, child_id: int, words: list[str], date_str: str) -> None:
@@ -302,6 +324,7 @@ def record_session(
             ),
         )
 
+    conn.execute("UPDATE children SET week_words = NULL WHERE id = ?", (child_id,))
     conn.commit()
     _maybe_advance_tier(conn, child_id)
     return session_id

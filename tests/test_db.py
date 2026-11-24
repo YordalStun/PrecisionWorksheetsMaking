@@ -183,5 +183,46 @@ class TestUpdateKnownWords(TestDbBase):
         self.assertEqual(after.correct_streak, before.correct_streak)
 
 
+class TestWeekWords(TestDbBase):
+    def test_week_words_stay_the_same_until_results_are_recorded(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:30]))
+        first = db.week_words(self.conn, child_id, random.Random(1))
+        for seed in range(2, 12):
+            self.assertEqual(db.week_words(self.conn, child_id, random.Random(seed)), first)
+        db.record_session(self.conn, child_id, "01/01/2026", [(w, True) for w in first])
+        self.assertIsNone(db.get_child(self.conn, child_id)["week_words"])
+
+    def test_shuffle_or_hand_pick_is_remembered(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:30]))
+        chosen = list(FIRST_100[30:33]) + list(FIRST_100[:2])
+        db.set_week_words(self.conn, child_id, chosen)
+        self.assertEqual(db.week_words(self.conn, child_id), chosen)
+
+    def test_retaking_the_test_picks_fresh_words(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:30]))
+        db.week_words(self.conn, child_id)
+        db.update_known_words(self.conn, child_id, "first100", set(FIRST_100[:40]))
+        self.assertIsNone(db.get_child(self.conn, child_id)["week_words"])
+
+    def test_old_databases_get_the_new_column(self):
+        import os
+        import sqlite3
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "old.db")
+            old = sqlite3.connect(path)
+            old.execute(
+                "CREATE TABLE children (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, year_group TEXT, "
+                "current_tier TEXT NOT NULL, created_at TEXT NOT NULL, last_sheet_words TEXT, last_sheet_date TEXT)"
+            )
+            old.commit()
+            old.close()
+            conn = db.connect(path)
+            child_id = db.add_child(conn, "Sam", "Year 1", "first100", set(FIRST_100[:10]))
+            self.assertEqual(len(db.week_words(conn, child_id)), 5)
+            conn.close()
+
+
 if __name__ == "__main__":
     unittest.main()
