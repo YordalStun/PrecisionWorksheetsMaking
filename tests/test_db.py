@@ -258,5 +258,37 @@ class TestWordCounts(TestDbBase):
         self.assertEqual(len(db.week_words(self.conn, child_id)), 4)
 
 
+
+class TestProgressEvidence(TestDbBase):
+    def test_initial_and_retests_are_kept_with_words_gained(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:10]))
+        db.update_known_words(self.conn, child_id, "first100", set(FIRST_100[:14]))
+        data = db.progress_summary(self.conn, child_id)
+        self.assertEqual([a["kind"] for a in data["assessments"]], ["initial", "retest"])
+        self.assertEqual(data["assessments"][1]["gained"], list(FIRST_100[10:14]))
+        self.assertEqual(data["known_at_start"], 10)
+
+    def test_practised_and_learned_words(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:10]))
+        words = db.week_words(self.conn, child_id)
+        for day in ("01/01/2026", "08/01/2026", "15/01/2026"):
+            db.record_session(self.conn, child_id, day, [(w, True) for w in words])
+        data = db.progress_summary(self.conn, child_id)
+        self.assertEqual({r["word"] for r in data["practised"]}, set(words))
+        self.assertEqual(set(data["learned"]), set(words[:3]))
+
+    def test_report_pdf_is_written(self):
+        import os
+        import tempfile
+
+        from precision_worksheets.progress_report import export_progress_report
+
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:10]))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "r.pdf")
+            export_progress_report(self.conn, child_id, path)
+            self.assertGreater(os.path.getsize(path), 1000)
+
+
 if __name__ == "__main__":
     unittest.main()

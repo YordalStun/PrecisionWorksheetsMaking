@@ -627,6 +627,7 @@ class ChildScreen(QWidget):
 
         tabs = QTabWidget()
         tabs.addTab(self._build_sheets_tab(), "This Week's Sheets")
+        tabs.addTab(self._build_progress_tab(), "Progress")
         tabs.addTab(self._build_games_tab(), "Games")
         tabs.addTab(self._build_history_tab(), "History")
         self._layout.addWidget(tabs, 1)
@@ -1020,6 +1021,97 @@ class ChildScreen(QWidget):
     # ------------------------------------------------------------------
     # History tab
     # ------------------------------------------------------------------
+    def _build_progress_tab(self) -> QWidget:
+        from .progress_report import kind_label
+
+        data = db.progress_summary(self.conn, self.child_id)
+        tab = QWidget()
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(12, 12, 12, 12)
+
+        top = QHBoxLayout()
+        summary = QLabel(
+            f"<b>Known at first assessment:</b> {data['known_at_start']} / {data['tier_total']} &nbsp;&nbsp; "
+            f"<b>Known now:</b> {len(data['known_now'])} / {data['tier_total']} &nbsp;&nbsp; "
+            f"<b>Learned through practice:</b> {len(data['learned'])} &nbsp;&nbsp; "
+            f"<b>Practice sessions:</b> {data['sessions']}"
+        )
+        summary.setWordWrap(True)
+        top.addWidget(summary, 1)
+        print_btn = QPushButton("\U0001f5a8 Print progress report (PDF)...")
+        print_btn.setObjectName("AccentButton")
+        print_btn.clicked.connect(self._export_progress_report)
+        top.addWidget(print_btn)
+        outer.addLayout(top)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
+        layout.setSpacing(8)
+
+        def heading(t: str) -> None:
+            lab = QLabel(t)
+            lab.setObjectName("SubHeaderLabel")
+            layout.addWidget(lab)
+
+        def wrapped(t: str) -> None:
+            lab = QLabel(t)
+            lab.setWordWrap(True)
+            lab.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            layout.addWidget(lab)
+
+        heading("Known-words assessments")
+        for a in data["assessments"]:
+            extra = ""
+            if a["kind"] == "retest":
+                extra = f" &nbsp; <span style='color:#2a6b2a'><b>+{len(a['gained'])} new:</b> {', '.join(a['gained']) or 'none'}</span>"
+            wrapped(f"<b>{a['date']} - {kind_label(a['kind'])}</b> ({len(a['known'])} known){extra}"
+                    f"<br><span style='color:#555'>{', '.join(a['known']) or 'none'}</span>")
+
+        heading("Words practised")
+        table = QTableWidget(len(data["practised"]), 5)
+        table.setHorizontalHeaderLabels(["Word", "First practised", "Times practised", "Times correct", "Now"])
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        for r, row in enumerate(data["practised"]):
+            now = "Known" if row["status"] == db.STATUS_KNOWN else "Still learning"
+            for c, val in enumerate([row["word"], row["first"], str(row["seen"]), str(row["correct"]), now]):
+                table.setItem(r, c, QTableWidgetItem(val))
+        table.horizontalHeader().setStretchLastSection(True)
+        table.setMinimumHeight(min(420, 34 + 30 * max(1, len(data["practised"]))))
+        layout.addWidget(table)
+        if not data["practised"]:
+            wrapped("No practice sessions recorded yet.")
+
+        heading(f"Words learned through practice ({len(data['learned'])})")
+        wrapped(", ".join(data["learned"]) or "None yet.")
+        heading(f"All words known now ({len(data['known_now'])})")
+        wrapped(", ".join(data["known_now"]) or "None yet.")
+        layout.addStretch(1)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll, 1)
+        return tab
+
+    def _export_progress_report(self) -> None:
+        from .progress_report import export_progress_report
+
+        child = self._child()
+        default = os.path.join(self.output_edit.text().strip() or DEFAULT_OUTPUT_DIR,
+                               f"{_safe_filename(child['name'])}_progress_report.pdf")
+        path, _ = QFileDialog.getSaveFileName(self, "Save progress report", default, "PDF files (*.pdf)")
+        if not path:
+            return
+        try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            export_progress_report(self.conn, self.child_id, path)
+        except OSError as exc:
+            show_error(self, "Couldn't save the report", str(exc))
+            return
+        if ask_yes_no(self, "Report saved", "Progress report saved. Open the folder now?"):
+            _open_folder(os.path.dirname(path) or os.getcwd())
+
     def _build_history_tab(self) -> QWidget:
         from .games_ui import GAME_LABELS, GAME_METRICS
 

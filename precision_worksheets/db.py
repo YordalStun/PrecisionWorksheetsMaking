@@ -64,6 +64,15 @@ CREATE TABLE IF NOT EXISTS session_words (
     correct INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS assessments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    child_id INTEGER NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    tier TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    known_words TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS game_scores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     child_id INTEGER NOT NULL REFERENCES children(id) ON DELETE CASCADE,
@@ -90,6 +99,7 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
                          ("practice_count", "INTEGER"), ("known_count", "INTEGER")):
         if column not in columns:
             conn.execute(f"ALTER TABLE children ADD COLUMN {column} {kind}")
+    _rebuild_missing_initial_assessments(conn)
     conn.commit()
     return conn
 
@@ -116,6 +126,7 @@ def add_child(conn: sqlite3.Connection, name: str, year_group: str, tier_key: st
     )
     child_id = cur.lastrowid
     _seed_tier(conn, child_id, tier_key, known_words)
+    _record_assessment(conn, child_id, tier_key, "initial", known_words)
     conn.commit()
     return child_id
 
@@ -178,6 +189,7 @@ def update_known_words(conn: sqlite3.Connection, child_id: int, tier_key: str, k
                 (STATUS_LEARNING, child_id, tier_key, word, STATUS_KNOWN),
             )
     conn.execute("UPDATE children SET week_words = NULL WHERE id = ?", (child_id,))
+    _record_assessment(conn, child_id, tier_key, "retest", known_words)
     conn.commit()
 
 
@@ -376,6 +388,85 @@ def _maybe_advance_tier(conn: sqlite3.Connection, child_id: int) -> None:
         conn.execute("UPDATE children SET current_tier = ? WHERE id = ?", (next_tier.key, child_id))
         _seed_tier(conn, child_id, next_tier.key, known_words=set())
         conn.commit()
+
+
+# ----------------------------------------------------------------------
+# Assessments and progress (evidence of improvement)
+# ----------------------------------------------------------------------
+def _record_assessment(conn: sqlite3.Connection, child_id: int, tier_key: str, kind: str, known_words) -> None:
+    tier_words = set(TIERS_BY_KEY[tier_key].words)
+    known = [w for w in TIERS_BY_KEY[tier_key].words if w in set(known_words) & tier_words]
+    conn.execute(
+        "INSERT INTO assessments (child_id, date, tier, kind, known_words) VALUES (?, ?, ?, ?, ?)",
+        (child_id, datetime.now().strftime("%d/%m/%Y"), tier_key, kind, ",".join(known)),
+    )
+
+
+def _rebuild_missing_initial_assessments(conn: sqlite3.Connection) -> None:
+    """Children added before assessments were stored: rebuild their starting point from the
+    words that were known without ever being practised (labelled as rebuilt, not a real record)."""
+    rows = conn.execute(
+        "SELECT * FROM children WHERE id NOT IN (SELECT child_id FROM assessments)"
+    ).fetchall()
+    for child in rows:
+        known = [r["word"] for r in conn.execute(
+            "SELECT word FROM word_state WHERE child_id = ? AND tier = ? AND status = ? AND times_seen = 0",
+            (child["id"], child["current_tier"], STATUS_KNOWN),
+        )]
+        created = child["created_at"][:10]
+        date = f"{created[8:10]}/{created[5:7]}/{created[0:4]}" if len(created) == 10 else created
+        conn.execute(
+            "INSERT INTO assessments (child_id, date, tier, kind, known_words) VALUES (?, ?, ?, ?, ?)",
+            (child["id"], date, child["current_tier"], "initial (rebuilt)", ",".join(known)),
+        )
+
+
+def get_assessments(conn: sqlite3.Connection, child_id: int) -> list[sqlite3.Row]:
+    return conn.execute("SELECT * FROM assessments WHERE child_id = ? ORDER BY id", (child_id,)).fetchall()
+
+
+def progress_summary(conn: sqlite3.Connection, child_id: int) -> dict:
+    """Everything needed to show improvement: each assessment (with words gained since the one
+    before), every word practised with its results, and the words learned through practice."""
+    child = get_child(conn, child_id)
+    tier_key = child["current_tier"]
+    assessments = []
+    previous: set[str] | None = None
+    for a in get_assessments(conn, child_id):
+        known = [w for w in a["known_words"].split(",") if w]
+        gained = [w for w in known if previous is not None and w not in previous]
+        assessments.append({"date": a["date"], "kind": a["kind"], "tier": a["tier"], "known": known,
+                            "gained": gained})
+        previous = set(known)
+
+    practised = conn.execute(
+        """SELECT sw.word, COUNT(*) AS seen, SUM(sw.correct) AS correct, MIN(s.id) AS first_id
+           FROM session_words sw JOIN sessions s ON s.id = sw.session_id
+           WHERE s.child_id = ? GROUP BY sw.word ORDER BY first_id""",
+        (child_id,),
+    ).fetchall()
+    first_dates = {r["id"]: r["date"] for r in conn.execute("SELECT id, date FROM sessions WHERE child_id = ?", (child_id,))}
+    status = {s.word: s.status for s in get_word_states(conn, child_id, tier_key)}
+    initially_known = set(assessments[0]["known"]) if assessments else set()
+    practised_rows = [
+        {"word": r["word"], "seen": r["seen"], "correct": r["correct"] or 0,
+         "first": first_dates.get(r["first_id"], ""),
+         "status": status.get(r["word"], STATUS_KNOWN)}
+        for r in practised
+    ]
+    learned = [r["word"] for r in practised_rows if r["status"] == STATUS_KNOWN and r["word"] not in initially_known]
+    known_now = known_words(conn, child_id, tier_key)
+    return {
+        "child": child,
+        "tier_label": TIERS_BY_KEY[tier_key].label,
+        "tier_total": len(TIERS_BY_KEY[tier_key].words),
+        "assessments": assessments,
+        "practised": practised_rows,
+        "learned": learned,
+        "known_now": known_now,
+        "known_at_start": len(initially_known),
+        "sessions": len(first_dates),
+    }
 
 
 def get_sessions(conn: sqlite3.Connection, child_id: int) -> list[sqlite3.Row]:
