@@ -86,9 +86,10 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(children)")}
-    for column in ("week_words", "week_basis"):
+    for column, kind in (("week_words", "TEXT"), ("week_basis", "TEXT"),
+                         ("practice_count", "INTEGER"), ("known_count", "INTEGER")):
         if column not in columns:
-            conn.execute(f"ALTER TABLE children ADD COLUMN {column} TEXT")
+            conn.execute(f"ALTER TABLE children ADD COLUMN {column} {kind}")
     conn.commit()
     return conn
 
@@ -222,21 +223,44 @@ def all_known_words(conn: sqlite3.Connection, child_id: int, tier_key: str) -> l
 
 
 def choose_session_words(conn: sqlite3.Connection, child_id: int, rng: random.Random | None = None) -> list[str]:
-    """The 5 words for this child's next sheet: 3 to practise (struggling
-    words first, then the next new ones in tier order) + 2 random known
-    words."""
+    """The words for this child's next sheet: their practice words (struggling
+    words first, then the next new ones in tier order) + random known words,
+    in the amounts set for that child (3 + 2 unless changed)."""
     rng = rng or random.Random()
     child = get_child(conn, child_id)
     if child is None:
         raise ValueError(f"No such child: {child_id}")
     tier_key = child["current_tier"]
-    practice = pick_practice_words(learning_words(conn, child_id, tier_key))
-    known_pick = pick_known_words(all_known_words(conn, child_id, tier_key), rng)
+    n_practice, n_known = word_counts(child)
+    practice = pick_practice_words(learning_words(conn, child_id, tier_key), n_practice)
+    known_pick = pick_known_words(all_known_words(conn, child_id, tier_key), rng, n_known)
     return practice + known_pick
 
 
+DEFAULT_PRACTICE_COUNT = 3
+DEFAULT_KNOWN_COUNT = 2
+MAX_WORDS_EACH = 8
+
+
+def word_counts(child: sqlite3.Row) -> tuple[int, int]:
+    """How many practice (not yet known) and known words go on this child's sheets."""
+    p, k = child["practice_count"], child["known_count"]
+    return (DEFAULT_PRACTICE_COUNT if p is None else p, DEFAULT_KNOWN_COUNT if k is None else k)
+
+
+def set_word_counts(conn: sqlite3.Connection, child_id: int, practice: int, known: int) -> None:
+    practice = max(1, min(MAX_WORDS_EACH, int(practice)))
+    known = max(0, min(MAX_WORDS_EACH, int(known)))
+    conn.execute(
+        "UPDATE children SET practice_count = ?, known_count = ?, week_words = NULL, week_basis = NULL WHERE id = ?",
+        (practice, known, child_id),
+    )
+    conn.commit()
+
+
 def _practice_basis(conn: sqlite3.Connection, child_id: int, tier_key: str) -> str:
-    return ",".join(sorted(pick_practice_words(learning_words(conn, child_id, tier_key))))
+    n_practice, _n_known = word_counts(get_child(conn, child_id))
+    return ",".join(sorted(pick_practice_words(learning_words(conn, child_id, tier_key), n_practice)))
 
 
 def week_words(conn: sqlite3.Connection, child_id: int, rng: random.Random | None = None) -> list[str]:

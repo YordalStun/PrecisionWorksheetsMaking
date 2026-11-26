@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSpinBox,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -649,11 +650,32 @@ class ChildScreen(QWidget):
         self._refresh_words_label()
 
         explainer = QLabel(
-            "The 3 practice words are picked automatically (struggling words first, then\n"
-            "the next new ones) - only the 2 known words are random, so you can reshuffle those."
+            "Practice words are picked automatically (struggling words first, then the next\n"
+            "new ones) - only the known words are random, so you can reshuffle those."
         )
         explainer.setObjectName("MutedLabel")
         words_layout.addWidget(explainer)
+
+        n_practice, n_known = db.word_counts(self._child())
+        counts_row = QHBoxLayout()
+        counts_row.addWidget(QLabel("Practice words:"))
+        self.practice_spin = QSpinBox()
+        self.practice_spin.setRange(1, db.MAX_WORDS_EACH)
+        self.practice_spin.setValue(n_practice)
+        counts_row.addWidget(self.practice_spin)
+        counts_row.addSpacing(16)
+        counts_row.addWidget(QLabel("Known words:"))
+        self.known_spin = QSpinBox()
+        self.known_spin.setRange(0, db.MAX_WORDS_EACH)
+        self.known_spin.setValue(n_known)
+        counts_row.addWidget(self.known_spin)
+        counts_hint = QLabel("(for this child - changing these picks a fresh set of words)")
+        counts_hint.setObjectName("MutedLabel")
+        counts_row.addWidget(counts_hint)
+        counts_row.addStretch(1)
+        self.practice_spin.valueChanged.connect(self._word_counts_changed)
+        self.known_spin.valueChanged.connect(self._word_counts_changed)
+        words_layout.addLayout(counts_row)
 
         shuffle_btn = QPushButton("\U0001f500 Shuffle known words")
         shuffle_btn.clicked.connect(self._shuffle_known)
@@ -734,8 +756,19 @@ class ChildScreen(QWidget):
         layout.addStretch(1)
         return tab
 
+    def _split_words(self) -> tuple[list[str], list[str]]:
+        known_pool = set(db.all_known_words(self.conn, self.child_id, self._child()["current_tier"]))
+        practice = [w for w in self.current_words if w not in known_pool]
+        known = [w for w in self.current_words if w in known_pool]
+        return practice, known
+
+    def _word_counts_changed(self) -> None:
+        db.set_word_counts(self.conn, self.child_id, self.practice_spin.value(), self.known_spin.value())
+        self.current_words = db.week_words(self.conn, self.child_id, rng=random.Random())
+        self._refresh_words_label()
+
     def _refresh_words_label(self) -> None:
-        practice, known = self.current_words[:3], self.current_words[3:]
+        practice, known = self._split_words()
         self.words_label.setText(
             "Practising: " + ", ".join(practice) + "   ·   Known: " + ", ".join(known)
         )
@@ -745,7 +778,9 @@ class ChildScreen(QWidget):
         known_pool = db.all_known_words(self.conn, self.child_id, tier_key)
         from .tracking import pick_known_words
 
-        self.current_words = self.current_words[:3] + pick_known_words(known_pool, random.Random())
+        practice, _known = self._split_words()
+        n_known = db.word_counts(self._child())[1]
+        self.current_words = practice + pick_known_words(known_pool, random.Random(), n_known)
         db.set_week_words(self.conn, self.child_id, self.current_words)
         self._refresh_words_label()
 
@@ -754,9 +789,12 @@ class ChildScreen(QWidget):
         learning_pool = [s.word for s in db.learning_words(self.conn, self.child_id, tier_key)]
         known_pool = db.all_known_words(self.conn, self.child_id, tier_key)
 
+        practice, known = self._split_words()
+        n_practice, n_known = db.word_counts(self._child())
         dlg = ChooseWordsDialog(
             self, learning_pool, known_pool,
-            preselected_practice=self.current_words[:3], preselected_known=self.current_words[3:],
+            preselected_practice=practice, preselected_known=known,
+            n_practice=n_practice, n_known=n_known,
         )
         if dlg.exec() == QDialog.Accepted and dlg.chosen_words is not None:
             self.current_words = dlg.chosen_words
@@ -1078,22 +1116,23 @@ class ChildScreen(QWidget):
 
 
 class ChooseWordsDialog(QDialog):
-    """Lets the user hand-pick this week's 5 words instead of the automatic
-    pick: 3 from the words still being learned, 2 from the words already
-    known. Falls back to fewer required picks if a pool is too small to
-    offer that many (e.g. a brand-new child with nothing known yet)."""
+    """Lets the user hand-pick this week's words instead of the automatic
+    pick: n_practice from the words still being learned, n_known from the
+    words already known. Falls back to fewer required picks if a pool is too
+    small to offer that many (e.g. a brand-new child with nothing known yet)."""
 
     def __init__(
         self, parent: QWidget, learning_pool: list[str], known_pool: list[str],
         preselected_practice: list[str], preselected_known: list[str],
+        n_practice: int = 3, n_known: int = 2,
     ):
         super().__init__(parent)
         self.setWindowTitle("Choose this week's words")
         self.setMinimumSize(620, 480)
         self.chosen_words: list[str] | None = None
 
-        self.required_practice = min(3, len(learning_pool))
-        self.required_known = min(2, len(known_pool))
+        self.required_practice = min(n_practice, len(learning_pool))
+        self.required_known = min(n_known, len(known_pool))
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(

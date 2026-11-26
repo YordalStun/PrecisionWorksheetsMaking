@@ -232,5 +232,31 @@ class TestWeekWords(TestDbBase):
             conn.close()
 
 
+
+class TestWordCounts(TestDbBase):
+    def test_existing_children_keep_three_practice_and_two_known(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:30]))
+        self.assertEqual(db.word_counts(db.get_child(self.conn, child_id)), (3, 2))
+        self.assertEqual(len(db.week_words(self.conn, child_id)), 5)
+
+    def test_counts_are_per_child_and_pick_a_fresh_set(self):
+        a = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:30]))
+        b = db.add_child(self.conn, "Kim", "Year 1", "first100", set(FIRST_100[:30]))
+        db.week_words(self.conn, a)
+        db.set_word_counts(self.conn, a, 5, 4)
+        words = db.week_words(self.conn, a)
+        known = set(db.all_known_words(self.conn, a, "first100"))
+        self.assertEqual(len([w for w in words if w not in known]), 5)
+        self.assertEqual(len([w for w in words if w in known]), 4)
+        self.assertEqual(len(db.week_words(self.conn, b)), 5)
+
+    def test_counts_are_kept_in_a_sensible_range(self):
+        child_id = db.add_child(self.conn, "Sam", "Year 1", "first100", set(FIRST_100[:30]))
+        db.set_word_counts(self.conn, child_id, 0, 99)
+        self.assertEqual(db.word_counts(db.get_child(self.conn, child_id)), (1, db.MAX_WORDS_EACH))
+        db.set_word_counts(self.conn, child_id, 4, 0)
+        self.assertEqual(len(db.week_words(self.conn, child_id)), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
